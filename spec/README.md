@@ -15,4 +15,4 @@ D:\Project\Psychology\psydoctor\spec\psydoctor\requirements.md
 D:\Project\Github\mortal_journey是被模仿项目的地址
 
 ## 工具
-D:\Project\Psychology\psydoctor\spec\codegraph-usage-guide.md这个是一个快速查看项目的工具
+D:\Project\Psychology\psydoctor\spec\codegraph-usage-guide.md这个是一个为项目建立索引的工具，使用它可以快速查看项目

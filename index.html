@@ -255,7 +255,7 @@
           }
           if (st) { st.textContent = "测试中..."; st.style.color = "#88aacc"; }
           try {
-            var url = apiUrl.replace(/\/+$/, "") + "/v1/chat/completions";
+            var url = apiUrl.replace(/\/+$/, "") + "/chat/completions";
             var headers = { "Content-Type": "application/json" };
             if (apiKey) headers["Authorization"] = "Bearer " + apiKey;
             var resp = await fetch(url, {
@@ -433,7 +433,7 @@
           qs("save-load-delete-all-btn").addEventListener("click", deleteAllSaves);
 
           document.querySelectorAll("[data-save-load-close]").forEach(function(el) {
-            el.addEventListener("click", closeSaveList);
+            el.addEventListener("click", closeSaveLoad);
           });
 
           // 存档列表点击（委托）
