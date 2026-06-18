@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>心理医生成长记</title>
+    <link rel="stylesheet" href="./css/main.css" />
+    <link rel="stylesheet" href="./css/logPanel.css" />
+  </head>
+  <body class="psy-main-body">
+
+    <!-- ============================================================
+         Script 加载顺序（严格按架构文档 §2.3 的依赖关系）
+         ============================================================ -->
+
+    <!-- 0. 基础设施（无依赖，最先加载） -->
+    <script src="./silly_tarven/bridge.js?v=20260618"></script>
+    <script src="./js/log/logPanel.js?v=20260618"></script>
+
+    <!-- 1. 数据层（无依赖，纯静态数据表） -->
+    <script src="./js/character/character_attribute.js"></script>
+    <script src="./js/data/doctor_level.js"></script>
+    <script src="./js/data/theory_state.js"></script>
+    <script src="./js/data/philosophy_state.js"></script>
+    <script src="./js/data/trait_samples.js"></script>
+    <script src="./js/data/client_templates.js"></script>
+    <script src="./js/data/creation_config.js"></script>
+
+    <!-- 2. 游戏引擎层（依赖数据层，计算密集，无 DOM 操作） -->
+    <script src="./js/game/psychologist_base_runtime.js"></script>
+    <script src="./js/game/client_character_sheet.js"></script>
+    <script src="./js/game/case_session.js"></script>
+    <script src="./js/game/ethics_dilemma.js"></script>
+    <script src="./js/game/countertransference.js"></script>
+
+    <!-- 3. 世界书/Preset 层（依赖数据层） -->
+    <script src="./js/worldbook/world_book_entries.js"></script>
+    <script src="./js/worldbook/world_book.js"></script>
+    <script src="./js/worldbook/preset_content.js"></script>
+    <script src="./js/worldbook/preset.js"></script>
+    <script src="./js/worldbook/state_rules.js"></script>
+    <script src="./js/worldbook/init_state_rules.js"></script>
+
+    <!-- 4. AI 服务层（依赖世界书 + 引擎层） -->
+    <script src="./js/ai_server/world_generate.js"></script>
+    <script src="./js/ai_server/init_state_generate.js"></script>
+    <script src="./js/ai_server/story_generate.js"></script>
+    <script src="./js/ai_server/state_generate.js"></script>
+
+    <!-- 5. UI 层（依赖所有上层模块；注意 panel.js 先于 panel_ui.js，mainScreen.js 最后） -->
+    <script src="./js/ui/fateChoiceController.js"></script>
+    <script src="./js/ui/mainScreen_panel.js"></script>
+    <script src="./js/ui/mainScreen_panel_ui.js"></script>
+    <script src="./js/ui/mainScreen_chat.js"></script>
+    <script src="./js/ui/mainScreen.js"></script>
+
+    <!-- ======== 顶部栏 ======== -->
+    <header class="psy-main-header">
+      <h1>心理医生成长记</h1>
+      <div class="psy-header-info" id="psy-header-info">加载中…</div>
+    </header>
+
+    <!-- ======== 主布局：三栏 ======== -->
+    <div class="psy-main-layout" id="psy-main-layout">
+
+      <!-- ===== 左栏：心理医生面板 ===== -->
+      <aside class="psy-pane psy-pane--player" aria-label="心理医生信息">
+        <div class="psy-player-world-fixed" aria-label="世界时间">
+          <div class="psy-world-time" id="psy-world-time">—</div>
+        </div>
+        <div class="psy-pane-header">
+          <span>心理医生</span>
+          <span class="psy-ct-indicator psy-ct-indicator--low" id="psy-ct-indicator" title="反移情风险">● 正常</span>
+        </div>
+        <button
+          type="button"
+          class="psy-mobile-panel-close"
+          data-psy-mobile-close="player"
+          aria-label="关闭角色信息"
+        >×</button>
+        <div class="psy-pane-body psy-player-body">
+
+          <!-- 基础信息 -->
+          <div class="psy-player-name-vertical" id="psy-player-name">—</div>
+          <div class="psy-level-line" id="psy-level-line">—</div>
+
+          <!-- 临床时数进度 -->
+          <div class="psy-resource-row">
+            <div class="psy-stat-cell">
+              <span class="psy-stat-k">临床时数</span>
+              <span class="psy-stat-v" id="psy-clinical-hours-text">—</span>
+            </div>
+            <div class="psy-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="psy-clinical-bar">
+              <div class="psy-bar-fill psy-bar-fill--clinical" id="psy-clinical-bar-fill" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <!-- 督导时数 + 个人体验时数 -->
+          <div class="psy-stat-pair-row">
+            <div class="psy-stat-cell">
+              <span class="psy-stat-k">督导时数</span>
+              <span class="psy-stat-v" id="psy-supervision-hours">0h</span>
+            </div>
+            <div class="psy-stat-cell">
+              <span class="psy-stat-k">个人体验</span>
+              <span class="psy-stat-v" id="psy-personal-therapy-hours">0h</span>
+            </div>
+          </div>
+
+          <!-- 当前理论取向 -->
+          <div class="psy-stat-cell" style="margin-top:0.3rem;">
+            <span class="psy-stat-k">理论取向</span>
+            <span class="psy-stat-v" id="psy-active-theory">—</span>
+          </div>
+
+          <!-- 8+2 属性面板 -->
+          <h3 class="psy-attr-section-title psy-attr-section-title--first">核心能力</h3>
+          <div class="psy-stat-pair-row">
+            <div class="psy-stat-cell"><span class="psy-stat-k">共情力</span><span class="psy-stat-v" id="psy-stat-empathy">—</span></div>
+            <div class="psy-stat-cell"><span class="psy-stat-k">洞察力</span><span class="psy-stat-v" id="psy-stat-insight">—</span></div>
+          </div>
+          <div class="psy-stat-pair-row">
+            <div class="psy-stat-cell"><span class="psy-stat-k">理论知</span><span class="psy-stat-v" id="psy-stat-knowledge">—</span></div>
+            <div class="psy-stat-cell"><span class="psy-stat-k">技术力</span><span class="psy-stat-v" id="psy-stat-technique">—</span></div>
+          </div>
+          <div class="psy-stat-pair-row">
+            <div class="psy-stat-cell"><span class="psy-stat-k">论断力</span><span class="psy-stat-v" id="psy-stat-judgment">—</span></div>
+            <div class="psy-stat-cell"><span class="psy-stat-k">自觉性</span><span class="psy-stat-v" id="psy-stat-awareness">—</span></div>
+          </div>
+          <div class="psy-stat-pair-row">
+            <div class="psy-stat-cell"><span class="psy-stat-k">沟通力</span><span class="psy-stat-v" id="psy-stat-communication">—</span></div>
+            <div class="psy-stat-cell"><span class="psy-stat-k">心理韧</span><span class="psy-stat-v" id="psy-stat-resilience">—</span></div>
+          </div>
+          <div class="psy-stat-pair-row">
+            <div class="psy-stat-cell"><span class="psy-stat-k">人文素养</span><span class="psy-stat-v" id="psy-stat-humanity">—</span></div>
+            <div class="psy-stat-cell"><span class="psy-stat-k">哲学思辨</span><span class="psy-stat-v" id="psy-stat-philosophy">—</span></div>
+          </div>
+
+          <!-- 哲学深度 -->
+          <h3 class="psy-attr-section-title">哲学深度</h3>
+          <div id="psy-philosophy-depth-list">
+            <div class="psy-stat-pair-row">
+              <div class="psy-stat-cell"><span class="psy-stat-k">现象学</span><span class="psy-stat-v" id="psy-phil-phenomenology">—</span></div>
+              <div class="psy-stat-cell"><span class="psy-stat-k">诠释学</span><span class="psy-stat-v" id="psy-phil-hermeneutics">—</span></div>
+            </div>
+            <div class="psy-stat-pair-row">
+              <div class="psy-stat-cell"><span class="psy-stat-k">存在哲学</span><span class="psy-stat-v" id="psy-phil-existential">—</span></div>
+              <div class="psy-stat-cell"><span class="psy-stat-k">东方心学</span><span class="psy-stat-v" id="psy-phil-eastern">—</span></div>
+            </div>
+            <div class="psy-stat-cell"><span class="psy-stat-k">后现代批判</span><span class="psy-stat-v" id="psy-phil-postmodern">—</span></div>
+          </div>
+
+          <!-- 藏书 -->
+          <h3 class="psy-attr-section-title">藏书</h3>
+          <div class="psy-bookshelf-grid" id="psy-bookshelf-grid" aria-label="藏书架，最多30本">
+            <!-- 至少渲染一行空位 -->
+            <div class="psy-bookshelf-slot psy-bookshelf-slot--empty">—</div>
+            <div class="psy-bookshelf-slot psy-bookshelf-slot--empty">—</div>
+            <div class="psy-bookshelf-slot psy-bookshelf-slot--empty">—</div>
+          </div>
+
+          <!-- 治疗工具 -->
+          <h3 class="psy-attr-section-title">治疗工具</h3>
+          <div class="psy-tool-grid" id="psy-tool-grid" aria-label="治疗工具，最多10件">
+            <div class="psy-tool-slot psy-tool-slot--empty">—</div>
+            <div class="psy-tool-slot psy-tool-slot--empty">—</div>
+            <div class="psy-tool-slot psy-tool-slot--empty">—</div>
+          </div>
+
+          <!-- 疲劳度 -->
+          <h3 class="psy-attr-section-title">状态</h3>
+          <div class="psy-stat-cell">
+            <span class="psy-stat-k">疲劳度</span>
+            <span class="psy-stat-v" id="psy-stat-fatigue">0%</span>
+          </div>
+          <div class="psy-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="psy-fatigue-bar">
+            <div class="psy-bar-fill psy-bar-fill--fatigue" id="psy-fatigue-bar-fill" style="width: 0%"></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ===== 中栏：聊天区 ===== -->
+      <section class="psy-pane psy-pane--chat" aria-label="叙事对话">
+        <div class="psy-pane-header psy-chat-pane-header" aria-label="叙事对话标题栏">
+          <button type="button" class="psy-mobile-open-btn" id="psy-mobile-open-player-btn" data-psy-mobile-open="player">
+            心理医生
+          </button>
+          <div class="psy-chat-pane-title">人生叙事</div>
+          <button type="button" class="psy-mobile-open-btn" id="psy-mobile-open-npc-btn" data-psy-mobile-open="npc">
+            周围人物
+          </button>
+        </div>
+
+        <!-- 聊天记录 -->
+        <div class="psy-chat-log" id="psy-chat-log">
+          <p class="psy-chat-placeholder">
+            此处将展示你的心理医生成长之旅。<br />
+            在开始之前，请先在启动页设置 API 并完成人生选择。
+          </p>
+        </div>
+
+        <!-- AI 状态指示 -->
+        <div id="psy-chat-status" class="psy-chat-status psy-chat-status--idle" role="status" aria-live="polite" aria-atomic="true"></div>
+
+        <!-- AI 处理耗时 -->
+        <div class="psy-ai-process-log-wrap" aria-label="AI 处理耗时记录">
+          <div id="psy-ai-process-log" class="psy-ai-process-log">
+            <div id="psy-ai-process-log-story" class="psy-ai-process-log__line" hidden></div>
+            <div id="psy-ai-process-log-state" class="psy-ai-process-log__line" hidden></div>
+          </div>
+        </div>
+
+        <!-- 行动建议 -->
+        <div class="psy-chat-suggestions" id="psy-chat-suggestions" aria-label="行动建议">
+          <button class="psy-suggestion-btn psy-suggestion-btn--aggressive hidden" data-suggestion="aggressive" hidden></button>
+          <button class="psy-suggestion-btn psy-suggestion-btn--neutral hidden" data-suggestion="neutral" hidden></button>
+          <button class="psy-suggestion-btn psy-suggestion-btn--cautious hidden" data-suggestion="cautious" hidden></button>
+          <button class="psy-suggestion-btn psy-suggestion-btn--veryCautious hidden" data-suggestion="veryCautious" hidden></button>
+        </div>
+
+        <!-- 输入区 -->
+        <div class="psy-chat-input-wrap">
+          <textarea
+            class="psy-chat-input"
+            id="psy-chat-input"
+            placeholder="输入你的行动或对话…（Enter 发送，Shift+Enter 换行）"
+            rows="1"
+            aria-label="输入行动或对话"
+          ></textarea>
+          <button class="psy-chat-send-btn" id="psy-chat-send-btn" type="button">发送</button>
+        </div>
+      </section>
+
+      <!-- ===== 右栏：来访者 + 周围人物 ===== -->
+      <aside class="psy-pane psy-pane--npc" aria-label="周围人物">
+        <div class="psy-pane-header">周围人物</div>
+        <button
+          type="button"
+          class="psy-mobile-panel-close"
+          data-psy-mobile-close="npc"
+          aria-label="关闭周围人物"
+        >×</button>
+        <div class="psy-pane-body" id="psy-npc-pane-body">
+
+          <!-- 来访者列表 -->
+          <h3 class="psy-attr-section-title psy-attr-section-title--first">当前来访者</h3>
+          <div class="psy-npc-list" id="psy-client-list">
+            <p style="font-size:0.78rem;color:#556677;">暂无来访者</p>
+          </div>
+
+          <!-- 督导师/同行 -->
+          <h3 class="psy-attr-section-title">督导师 / 同行</h3>
+          <div class="psy-npc-list" id="psy-colleague-list">
+            <p style="font-size:0.78rem;color:#556677;">暂无</p>
+          </div>
+
+          <!-- 职业事件 -->
+          <h3 class="psy-attr-section-title">职业事件</h3>
+          <div class="psy-npc-list" id="psy-career-events-list">
+            <p style="font-size:0.78rem;color:#556677;">暂无活跃事件</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- ======== 门闩全屏覆盖层 ======== -->
+    <div id="psy-bootstrap-gate" class="hidden" aria-hidden="true">
+      <div class="psy-gate-content">
+        <h2 class="psy-gate-title">命运正在展开…</h2>
+        <div class="psy-gate-phases" id="psy-gate-phases">
+          <div class="psy-gate-phase psy-gate-phase--waiting" id="psy-gate-phase-1">
+            <span class="psy-gate-phase-icon">○</span>
+            <span class="psy-gate-phase-label">生成人生开局剧情</span>
+            <span class="psy-gate-phase-time" id="psy-gate-time-1"></span>
+          </div>
+          <div class="psy-gate-phase psy-gate-phase--waiting" id="psy-gate-phase-2">
+            <span class="psy-gate-phase-icon">○</span>
+            <span class="psy-gate-phase-label">配置初始生涯状态</span>
+            <span class="psy-gate-phase-time" id="psy-gate-time-2"></span>
+          </div>
+          <div class="psy-gate-phase psy-gate-phase--waiting" id="psy-gate-phase-3">
+            <span class="psy-gate-phase-icon">○</span>
+            <span class="psy-gate-phase-label">同步周围人物与状态</span>
+            <span class="psy-gate-phase-time" id="psy-gate-time-3"></span>
+          </div>
+          <div class="psy-gate-phase psy-gate-phase--waiting" id="psy-gate-phase-4">
+            <span class="psy-gate-phase-icon">○</span>
+            <span class="psy-gate-phase-label">完成初始化</span>
+            <span class="psy-gate-phase-time" id="psy-gate-time-4"></span>
+          </div>
+        </div>
+        <div class="psy-gate-error hidden" id="psy-gate-error"></div>
+        <button class="psy-gate-retry-btn hidden" id="psy-gate-retry-btn" type="button">重试</button>
+      </div>
+    </div>
+
+    <!-- ======== 通用弹窗容器 ======== -->
+    <div id="psy-modal-root" class="psy-modal-root hidden" aria-hidden="true">
+      <div class="psy-modal-backdrop" data-psy-modal-close tabindex="-1"></div>
+      <div class="psy-modal" role="dialog" aria-modal="true" aria-labelledby="psy-modal-title">
+        <button type="button" class="psy-modal-close" data-psy-modal-close aria-label="关闭">×</button>
+        <h3 id="psy-modal-title" class="psy-modal-title"></h3>
+        <div id="psy-modal-body"></div>
+      </div>
+    </div>
+
+    <!-- ======== 初始化脚本 ======== -->
+    <script>
+      (function () {
+        "use strict";
+        // 与 index.html 保持一致的存储键
+        var BOOTSTRAP_KEY      = "psydoctor_bootstrap_v1";
+        var ACTIVE_SAVE_ID_KEY = "PSY_ACTIVE_SAVE_ID_V1";
+
+        function qs(id) { return document.getElementById(id); }
+
+        // 兜底：如果 mainScreen.js 未加载（开发早期），显示基本状态
+        function showFallbackStatus() {
+          var headerInfo = qs("psy-header-info");
+          if (!headerInfo) return;
+          try {
+            var raw = sessionStorage.getItem(BOOTSTRAP_KEY);
+            if (!raw) {
+              headerInfo.textContent = "未检测到角色数据 — 请从启动页开始";
+              return;
+            }
+            var bootstrap = JSON.parse(raw);
+            var fc = bootstrap.fateChoice;
+            if (fc && fc.playerName) {
+              headerInfo.textContent = fc.playerName + " | 等待模块加载…";
+            } else {
+              headerInfo.textContent = "数据已加载 | 等待模块初始化…";
+            }
+          } catch (_e) {
+            headerInfo.textContent = "数据读取异常 — 请从启动页重新开始";
+          }
+        }
+
+        // 移动端面板切换
+        function bindMobileToggles() {
+          document.querySelectorAll("[data-psy-mobile-open]").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+              var target = this.getAttribute("data-psy-mobile-open");
+              var pane = document.querySelector(".psy-pane--" + target);
+              if (pane) pane.classList.add("psy-mobile-open");
+            });
+          });
+          document.querySelectorAll("[data-psy-mobile-close]").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+              var target = this.getAttribute("data-psy-mobile-close");
+              var pane = document.querySelector(".psy-pane--" + target);
+              if (pane) pane.classList.remove("psy-mobile-open");
+            });
+          });
+          // Escape 关闭移动面板
+          document.addEventListener("keydown", function(e) {
+            if (e.key === "Escape") {
+              document.querySelectorAll(".psy-pane.psy-mobile-open").forEach(function(p) {
+                p.classList.remove("psy-mobile-open");
+              });
+            }
+          });
+        }
+
+        // 聊天输入框 Enter 发送
+        function bindChatInput() {
+          var input = qs("psy-chat-input");
+          var sendBtn = qs("psy-chat-send-btn");
+          if (!input || !sendBtn) return;
+          input.addEventListener("keydown", function(e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              sendBtn.click();
+            }
+          });
+          // 自动增高
+          input.addEventListener("input", function() {
+            this.style.height = "auto";
+            this.style.height = Math.min(this.scrollHeight, 120) + "px";
+          });
+          // 发送按钮（由 mainScreen_chat.js 绑定具体逻辑，此处仅做占位）
+          sendBtn.addEventListener("click", function() {
+            var text = input.value.trim();
+            if (!text) return;
+            // 如果 mainScreen_chat 已加载，由它处理；
+            // 否则仅显示占位消息
+            if (window.PsyMainScreenChat && window.PsyMainScreenChat.handleChatSend) {
+              window.PsyMainScreenChat.handleChatSend(text);
+            } else {
+              // 占位：直接显示用户消息
+              appendChatMessage(text, "user");
+              appendChatMessage("（模块尚未加载，这是占位回复。请等待后续开发完成。）", "system");
+            }
+            input.value = "";
+            input.style.height = "auto";
+          });
+        }
+
+        function appendChatMessage(text, role) {
+          var log = qs("psy-chat-log");
+          if (!log) return;
+          var div = document.createElement("div");
+          div.className = "psy-chat-msg psy-chat-msg--" + role;
+          div.textContent = text;
+          // 移除占位提示
+          var placeholder = log.querySelector(".psy-chat-placeholder");
+          if (placeholder) placeholder.remove();
+          log.appendChild(div);
+          log.scrollTop = log.scrollHeight;
+        }
+
+        // 暴露给其他模块使用
+        window._psyAppendChatMessage = appendChatMessage;
+
+        // ---- 初始化 ----
+        function init() {
+          showFallbackStatus();
+          bindMobileToggles();
+          bindChatInput();
+
+          // 如果 mainScreen.js 已加载，由它接管完整初始化
+          if (window.PsyMainScreen && typeof window.PsyMainScreen.init === "function") {
+            window.PsyMainScreen.init();
+          }
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", init);
+        } else {
+          init();
+        }
+      })();
+    </script>
+  </body>
+</html>

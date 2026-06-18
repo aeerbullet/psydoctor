@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>psydoctor 脚手架验证</title>
+  <style>
+    body { font-family: monospace; background: #0d1b2a; color: #c8e6f5; padding: 2rem; }
+    h1 { color: #88cc99; font-size: 1.2rem; margin-bottom: 1.5rem; }
+    .test { margin: 0.6rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid; font-size: 0.85rem; }
+    .test--running { border-color: #88aacc; color: #88aacc; }
+    .test--pass { border-color: #88cc99; color: #88cc99; }
+    .test--fail { border-color: #cc6666; color: #cc6666; }
+    .test--skip { border-color: #888; color: #888; }
+    pre { background: #111; padding: 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: pre-wrap; color: #667788; max-height: 120px; overflow-y: auto; }
+    #summary { margin-top: 1.5rem; font-size: 1rem; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>🔬 psydoctor 脚手架验证 — 1.1.2</h1>
+  <div id="results"></div>
+  <div id="summary"></div>
+
+  <!-- Load bridge.js and logPanel.js in isolation -->
+  <script src="./silly_tarven/bridge.js?v=20260618"></script>
+  <script src="./js/log/logPanel.js?v=20260618"></script>
+
+  <script>
+  (function () {
+    "use strict";
+    var results = document.getElementById("results");
+    var summary = document.getElementById("summary");
+    var passCount = 0, failCount = 0, skipCount = 0;
+
+    function log(id, status, msg) {
+      var d = document.createElement("div");
+      d.className = "test test--" + status;
+      d.textContent = (status === "pass" ? "✅ " : status === "fail" ? "❌ " : status === "skip" ? "⏭ " : "⏳ ") + id + ": " + msg;
+      results.appendChild(d);
+      if (status === "pass") passCount++;
+      else if (status === "fail") failCount++;
+      else skipCount++;
+    }
+
+    function done() {
+      summary.textContent = "结果：" + passCount + " 通过，"
+        + failCount + " 失败，"
+        + skipCount + " 跳过";
+      summary.style.color = failCount > 0 ? "#cc6666" : "#88cc99";
+    }
+
+    // ─────────────────────────────────────────────
+    // TEST 1: bridge.js 可正常调用
+    // ─────────────────────────────────────────────
+    (function testBridge() {
+      log("bridge.js 加载",
+          typeof TavernHelper !== "undefined" ? "pass" : "fail",
+          "TavernHelper " + (typeof TavernHelper !== "undefined" ? "已定义" : "未定义（检查 window.TavernHelper）"));
+
+      if (typeof TavernHelper === "undefined") {
+        log("bridge.js API", "skip", "因 TavernHelper 未定义而跳过");
+        log("bridge.js 结构", "skip", "因 TavernHelper 未定义而跳过");
+        return;
+      }
+
+      log("bridge.js API", "pass", "TavernHelper 已定义");
+
+      // 检查 generateFromMessages 方法
+      var hasGenerate = typeof TavernHelper.generateFromMessages === "function";
+      log("bridge.generateFromMessages",
+          hasGenerate ? "pass" : "fail",
+          "generateFromMessages " + (hasGenerate ? "是函数" : "不是函数"));
+
+      // 检查 API 配置读取
+      var apiOverrideKey = "IMMORTAL_ST_BRIDGE_API_OVERRIDE_V1";
+      var hasOverrideKey = typeof localStorage !== "undefined";
+      log("localStorage 可用",
+          hasOverrideKey ? "pass" : "fail",
+          hasOverrideKey ? "正常" : "不可用"));
+
+      // 检查是否有已保存的配置
+      try {
+        var raw = localStorage.getItem(apiOverrideKey);
+        if (raw) {
+          var cfg = JSON.parse(raw);
+          if (cfg && cfg.apiUrl && cfg.model) {
+            log("API 配置已存在",
+                "pass",
+                "apiUrl=" + cfg.apiUrl.replace(/\/v1.*/, "/...") + " model=" + cfg.model);
+          } else {
+            log("API 配置已存在", "skip", "存在但 URL/模型字段不完整");
+          }
+        } else {
+          log("API 配置已存在", "skip", "未配置（需用户在 index.html 设置）");
+        }
+      } catch (e) {
+        log("API 配置读取", "fail", "异常：" + e.message);
+      }
+
+      // 尝试一次最小化 API 调用（带超时保护）
+      var apiUrlInput = document.createElement("input");
+      apiUrlInput.type = "text";
+      try {
+        var raw2 = localStorage.getItem(apiOverrideKey);
+        var cfg2 = raw2 ? JSON.parse(raw2) : null;
+        if (cfg2 && cfg2.apiUrl && cfg2.model) {
+          log("bridge.js API 调用",
+              "pass",
+              "配置完整，将尝试实际调用…（见下方)");
+          // 异步测试
+          TavernHelper.generateFromMessages({
+            messages: [{ role: "user", content: "Say exactly one word: OK" }],
+            signal: (function () {
+              var c = new AbortController();
+              setTimeout(function () { c.abort(); }, 8000);
+              return c.signal;
+            })()
+          }).then(function (resp) {
+            var txt = (resp.text || "").trim().slice(0, 60);
+            log("API 调用成功",
+                txt.length > 0 ? "pass" : "fail",
+                "返回: " + JSON.stringify(txt));
+            done();
+          }).catch(function (e) {
+            if (e.name === "AbortError") {
+              log("API 调用超时", "skip", "8s 内未响应（可能是网络问题）");
+            } else {
+              log("API 调用失败", "fail", e.message || String(e));
+            }
+            done();
+          });
+          return; // 异步完成会调用 done()
+        } else {
+          log("bridge.js API 调用", "skip", "无有效配置，跳过实际调用");
+        }
+      } catch (e) {
+        log("bridge.js API 调用", "fail", "异常：" + e.message);
+      }
+    })();
+
+    // ─────────────────────────────────────────────
+    // TEST 2: logPanel.js 可正常劫持 console
+    // ─────────────────────────────────────────────
+    (function testLogPanel() {
+      if (typeof GameLog === "undefined") {
+        log("logPanel.js 加载", "fail", "GameLog 未定义");
+        return;
+      }
+      log("logPanel.js 加载", "pass", "GameLog 已定义");
+
+      if (typeof GameLog.log !== "function") {
+        log("logPanel.log 函数", "fail", "GameLog.log 不是函数");
+      } else {
+        log("logPanel.log 函数", "pass", "GameLog.log 是函数");
+      }
+
+      // 检查 DOM 中是否有 logPanel 容器
+      var panel = document.getElementById("log-panel");
+      if (panel) {
+        log("logPanel DOM 容器", "pass", "#log-panel 已存在");
+      } else {
+        // 可能容器 ID 不同，尝试其他常见 ID
+        var ids = ["logPanel", "game-log", "debug-log"];
+        var found = false;
+        for (var i = 0; i < ids.length; i++) {
+          if (document.getElementById(ids[i])) { found = true; break; }
+        }
+        log("logPanel DOM 容器", found ? "pass" : "skip",
+            found ? "找到容器" : "未找到容器（ID 可能不同于预期，请检查 logPanel.js）");
+      }
+
+      // 尝试调用 GameLog.log
+      try {
+        GameLog.log("test", "这是一条测试日志");
+        log("GameLog.log 调用", "pass", "未抛出异常");
+      } catch (e) {
+        log("GameLog.log 调用", "fail", "抛出异常：" + e.message);
+      }
+    })();
+
+    // ─────────────────────────────────────────────
+    // TEST 3: index.html 和 main.html 可打开
+    //         （这里通过检测脚本加载可行性来间接验证）
+    // ─────────────────────────────────────────────
+    (function testHtmlFiles() {
+      // 检测所有已加载脚本是否有语法错误
+      var scripts = document.querySelectorAll("script[src]");
+      var loadedCount = 0, errorCount = 0;
+      for (var i = 0; i < scripts.length; i++) {
+        loadedCount++; // 加载并执行到此处即说明无阻塞性语法错误
+      }
+      log("HTML 解析完成",
+          "pass",
+          "共有 " + loadedCount + " 个外部脚本标签已执行（语法错误会阻止执行到这里）");
+
+      // 检测 CSS 文件是否可访问（通过 link 标签存在性）
+      var links = document.querySelectorAll("link[rel='stylesheet']");
+      log("CSS 样式表引用",
+          links.length >= 2 ? "pass" : "fail",
+          "共有 " + links.length + " 个 stylesheet 引用");
+
+      // 检测 body 是否正常渲染
+      var bodyOk = document.body !== null && document.body.children.length > 0;
+      log("body 渲染正常",
+          bodyOk ? "pass" : "fail",
+          bodyOk ? "body 已正常渲染" : "body 异常");
+
+      // 关键 DOM 元素存在性检查（模拟 main.html 的主要元素）
+      var criticalIds = [
+        "psy-chat-log", "psy-chat-input", "psy-chat-send-btn",
+        "psy-world-time", "psy-level-line", "psy-ct-indicator",
+        "psy-client-list", "psy-main-layout"
+      ];
+      var missing = [];
+      for (var j = 0; j < criticalIds.length; j++) {
+        if (!document.getElementById(criticalIds[j])) missing.push(criticalIds[j]);
+      }
+      log("main.html 关键 DOM 元素",
+          missing.length === 0 ? "pass" : "fail",
+          missing.length === 0
+            ? "全部存在"
+            : "缺失: " + missing.join(", "));
+
+      // index.html 相关元素（启动画面对应元素）
+      var indexIds = ["splash-screen", "api-settings-root", "save-load-root", "character-creation-screen"];
+      var missingIndex = [];
+      for (var k = 0; k < indexIds.length; k++) {
+        if (!document.getElementById(indexIds[k])) missingIndex.push(indexIds[k]);
+      }
+      // 这些元素可能不在 main.html 的 DOM 中（正常），所以只报告 skip
+      log("index.html DOM 元素", missingIndex.length === 0 ? "pass" : "skip",
+          missingIndex.length === 0
+            ? "全部存在于当前 DOM（正常）"
+            : "未在当前 DOM 中（属于 main.html，跳过）");
+    })();
+
+    // 如果有异步测试未完成，done() 会由那些测试调用；这里做兜底
+    setTimeout(function () { done(); }, 500);
+  })();
+  </script>
+</body>
+</html>

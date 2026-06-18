@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>心理医生成长记</title>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/start_frame.css" />
+    <link rel="stylesheet" href="./css/logPanel.css" />
+    <link rel="stylesheet" href="./css/main.css" />
+    <link rel="stylesheet" href="./css/creation.css" />
+  </head>
+  <body>
+    <script src="./js/log/logPanel.js?v=20260618"></script>
+
+    <!-- ======== 启动画面 ======== -->
+    <div id="splash-screen">
+      <div id="splash-bg" aria-hidden="true"></div>
+
+      <div id="splash-content">
+        <h1 id="splash-title">心理医生成长记</h1>
+        <p id="splash-info">从学徒到心灵哲学家&nbsp;&nbsp;|&nbsp;&nbsp;一段疗愈与被疗愈的旅程</p>
+
+        <div id="splash-buttons">
+          <button class="splash-btn" id="start-new-life-btn" type="button">开始新人生</button>
+          <button class="splash-btn" id="load-life-btn" type="button">读取人生</button>
+          <button class="splash-btn" id="api-settings-btn" type="button">API 设置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== API 设置弹窗 ======== -->
+    <div id="api-settings-root" class="splash-modal-root hidden" aria-hidden="true">
+      <div class="splash-modal-backdrop" data-api-settings-close tabindex="-1"></div>
+      <div class="splash-modal" role="dialog" aria-modal="true" aria-labelledby="api-settings-title">
+        <button type="button" class="splash-modal-close" data-api-settings-close aria-label="关闭">×</button>
+        <h3 id="api-settings-title" class="splash-modal-title">API 设置</h3>
+        <p class="splash-modal-sub">
+          填写后会保存到本机浏览器存储，不会上传到服务器，请放心填写。仅支持 OpenAI 兼容格式的 API。
+        </p>
+
+        <div class="splash-form">
+          <label class="splash-field">
+            <span class="splash-field-k">API URL</span>
+            <input id="api-url-input" class="splash-field-input" type="text" placeholder="https://api.example.com/v1" />
+          </label>
+          <label class="splash-field">
+            <span class="splash-field-k">API Key</span>
+            <input id="api-key-input" class="splash-field-input" type="password" placeholder="sk-..." />
+          </label>
+          <label class="splash-field">
+            <span class="splash-field-k">模型</span>
+            <input id="api-model-input" class="splash-field-input" type="text" placeholder="gpt-4.1-mini" />
+          </label>
+        </div>
+
+        <div class="splash-modal-actions splash-modal-actions--3">
+          <button type="button" class="splash-btn splash-btn--secondary" id="api-settings-clear-btn">清除</button>
+          <button type="button" class="splash-btn splash-btn--secondary" id="api-settings-test-btn">测试</button>
+          <button type="button" class="splash-btn" id="api-settings-save-btn">保存</button>
+        </div>
+        <div id="api-settings-status" class="splash-modal-status" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <!-- ======== 读取人生：存档列表弹窗 ======== -->
+    <div id="save-load-root" class="splash-modal-root hidden" aria-hidden="true">
+      <div class="splash-modal-backdrop" data-save-load-close tabindex="-1"></div>
+      <div class="splash-modal" role="dialog" aria-modal="true" aria-labelledby="save-load-title">
+        <button type="button" class="splash-modal-close" data-save-load-close aria-label="关闭">×</button>
+        <h3 id="save-load-title" class="splash-modal-title">读取人生</h3>
+        <p class="splash-modal-sub">选择一个存档继续你的心理医生之旅（存档保存在本机浏览器中）。</p>
+        <div id="save-load-list" class="save-load-list"></div>
+        <div class="splash-modal-actions splash-modal-actions--2">
+          <button type="button" class="splash-btn splash-btn--secondary" id="save-load-refresh-btn">刷新</button>
+          <button type="button" class="splash-btn splash-btn--secondary" id="save-load-delete-all-btn">清空</button>
+        </div>
+        <div id="save-load-status" class="splash-modal-status" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <!-- ======== 自定义对话框 ======== -->
+    <div id="psy-dialog-root" class="psy-modal-root hidden" aria-hidden="true">
+      <div class="psy-modal-backdrop" data-psy-dialog-close tabindex="-1"></div>
+      <div class="psy-modal" role="dialog" aria-modal="true" aria-labelledby="psy-dialog-title">
+        <button type="button" class="psy-modal-close" data-psy-dialog-close aria-label="关闭">×</button>
+        <h3 id="psy-dialog-title" class="psy-modal-title"></h3>
+        <div id="psy-dialog-message" class="creation-card-desc"></div>
+        <div id="psy-dialog-field" class="hidden">
+          <input id="psy-dialog-input" class="creation-info-input" type="text" style="width:100%;margin-top:0.5rem;" />
+          <div id="psy-dialog-hint" class="creation-card-desc hidden" aria-live="polite" style="margin-top:0.3rem;"></div>
+        </div>
+        <div class="splash-modal-actions" style="margin-top:1rem;">
+          <button type="button" class="splash-btn splash-btn--secondary" id="psy-dialog-cancel-btn">取消</button>
+          <button type="button" class="splash-btn" id="psy-dialog-ok-btn">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== 人生选择（命运抉择） ======== -->
+    <div id="character-creation-screen" class="hidden" aria-hidden="true">
+      <div class="creation-container">
+        <div class="creation-step-indicator" id="creation-step-indicator"></div>
+        <div class="creation-content" id="creation-content"></div>
+        <div class="creation-nav" id="creation-nav"></div>
+      </div>
+    </div>
+
+    <!-- ======== 特质详情弹窗 ======== -->
+    <div id="psy-trait-detail-root" class="psy-trait-modal-root hidden" aria-hidden="true">
+      <div class="psy-trait-modal-backdrop" data-psy-trait-modal-close tabindex="-1"></div>
+      <div class="psy-trait-modal" role="dialog" aria-modal="true" aria-labelledby="psy-trait-modal-title">
+        <button type="button" class="psy-trait-modal-close" data-psy-trait-modal-close aria-label="关闭">×</button>
+        <h4 id="psy-trait-modal-title" class="psy-trait-modal-title"></h4>
+        <div id="psy-trait-modal-rarity" class="psy-trait-modal-rarity"></div>
+        <div id="psy-trait-modal-body" class="psy-trait-modal-body"></div>
+      </div>
+    </div>
+
+    <!-- fateChoice 控制器（须在特质弹窗 DOM 之后加载） -->
+    <script src="./js/ui/fateChoiceController.js"></script>
+
+    <script>
+      (function () {
+        "use strict";
+        // ---- 存储键常量（与 main.html + bridge.js 保持一致） ----
+        var API_OVERRIDE_KEY     = "IMMORTAL_ST_BRIDGE_API_OVERRIDE_V1";  // 复用 bridge 键名
+        var SAVE_INDEX_KEY       = "PSY_SAVES_INDEX_V1";
+        var SAVE_PREFIX          = "PSY_SAVE_V1:";
+        var ACTIVE_SAVE_ID_KEY   = "PSY_ACTIVE_SAVE_ID_V1";
+        var BOOTSTRAP_KEY        = "psydoctor_bootstrap_v1";
+
+        function qs(id) { return document.getElementById(id); }
+
+        // ---- API 配置检测 ----
+        function isApiConfigured() {
+          try {
+            var raw = localStorage.getItem(API_OVERRIDE_KEY);
+            if (!raw) return false;
+            var o = JSON.parse(raw);
+            if (!o || typeof o !== "object") return false;
+            var apiUrl = o.apiUrl != null ? String(o.apiUrl).trim() : "";
+            var model  = o.model  != null ? String(o.model).trim()  : "";
+            var apiKey = o.apiKey != null ? String(o.apiKey).trim() : "";
+            if (!apiUrl || !model) return false;
+            if (/example\.com/i.test(apiUrl)) return false;
+            var isLocal =
+              /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(apiUrl) ||
+              /^https?:\/\/0\.0\.0\.0(:\d+)?(\/|$)/i.test(apiUrl);
+            if (!isLocal && !apiKey) return false;
+            return true;
+          } catch (_e) {
+            return false;
+          }
+        }
+
+        function refreshApiGateUi() {
+          var ok = isApiConfigured();
+          var startBtn = qs("start-new-life-btn");
+          var loadBtn  = qs("load-life-btn");
+          var tip = ok ? "" : "请先在「API 设置」中配置 API URL / Key / 模型（本地代理可不填 Key）。";
+          if (startBtn) {
+            startBtn.disabled = !ok;
+            if (!ok) startBtn.setAttribute("title", tip);
+            else startBtn.removeAttribute("title");
+          }
+          if (loadBtn) {
+            loadBtn.disabled = !ok;
+            if (!ok) loadBtn.setAttribute("title", tip);
+            else loadBtn.removeAttribute("title");
+          }
+        }
+
+        // ---- API 设置弹窗 ----
+        function openApiSettings() {
+          var root = qs("api-settings-root");
+          if (!root) return;
+          var st = qs("api-settings-status");
+          if (st) st.textContent = "";
+          try {
+            var raw = localStorage.getItem(API_OVERRIDE_KEY);
+            var data = raw ? JSON.parse(raw) : null;
+            if (data && typeof data === "object") {
+              var u = qs("api-url-input");
+              var k = qs("api-key-input");
+              var m = qs("api-model-input");
+              if (u) u.value = data.apiUrl != null ? String(data.apiUrl) : "";
+              if (k) k.value = data.apiKey != null ? String(data.apiKey) : "";
+              if (m) m.value = data.model  != null ? String(data.model)  : "";
+            }
+          } catch (_e) { /* 忽略 */ }
+          root.classList.remove("hidden");
+          root.setAttribute("aria-hidden", "false");
+          document.body.style.overflow = "hidden";
+          var u2 = qs("api-url-input");
+          if (u2) u2.focus();
+        }
+
+        function closeApiSettings() {
+          var root = qs("api-settings-root");
+          if (!root) return;
+          root.classList.add("hidden");
+          root.setAttribute("aria-hidden", "true");
+          document.body.style.overflow = "";
+        }
+
+        function saveApiSettings() {
+          var st   = qs("api-settings-status");
+          var uEl  = qs("api-url-input");
+          var kEl  = qs("api-key-input");
+          var mEl  = qs("api-model-input");
+          var apiUrl = uEl ? uEl.value.trim() : "";
+          var apiKey = kEl ? kEl.value.trim() : "";
+          var model  = mEl ? mEl.value.trim() : "";
+          if (!apiUrl || !model) {
+            if (st) { st.textContent = "API URL 和模型不能为空"; st.style.color = "#cc8888"; }
+            return;
+          }
+          var cfg = { apiUrl: apiUrl, apiKey: apiKey, model: model };
+          try {
+            localStorage.setItem(API_OVERRIDE_KEY, JSON.stringify(cfg));
+            if (st) { st.textContent = "已保存"; st.style.color = "#88cc88"; }
+            refreshApiGateUi();
+            setTimeout(closeApiSettings, 600);
+          } catch (e) {
+            if (st) { st.textContent = "保存失败：" + (e.message || e); st.style.color = "#cc8888"; }
+          }
+        }
+
+        function clearApiSettings() {
+          try { localStorage.removeItem(API_OVERRIDE_KEY); } catch (_e) {}
+          var uEl = qs("api-url-input");   if (uEl) uEl.value = "";
+          var kEl = qs("api-key-input");   if (kEl) kEl.value = "";
+          var mEl = qs("api-model-input"); if (mEl) mEl.value = "";
+          var st  = qs("api-settings-status");
+          if (st) { st.textContent = "已清除"; st.style.color = "#ccaa66"; }
+          refreshApiGateUi();
+        }
+
+        async function testApiSettings() {
+          var st   = qs("api-settings-status");
+          var uEl  = qs("api-url-input");
+          var kEl  = qs("api-key-input");
+          var mEl  = qs("api-model-input");
+          var apiUrl = uEl ? uEl.value.trim() : "";
+          var apiKey = kEl ? kEl.value.trim() : "";
+          var model  = mEl ? mEl.value.trim() : "";
+          if (!apiUrl || !model) {
+            if (st) { st.textContent = "请先填写 API URL 和模型"; st.style.color = "#ccaa66"; }
+            return;
+          }
+          if (st) { st.textContent = "测试中..."; st.style.color = "#88aacc"; }
+          try {
+            var url = apiUrl.replace(/\/+$/, "") + "/v1/chat/completions";
+            var headers = { "Content-Type": "application/json" };
+            if (apiKey) headers["Authorization"] = "Bearer " + apiKey;
+            var resp = await fetch(url, {
+              method: "POST",
+              headers: headers,
+              body: JSON.stringify({
+                model: model,
+                messages: [{ role: "user", content: "Hi" }],
+                max_tokens: 5,
+                stream: false
+              }),
+              signal: (function() { var c = new AbortController(); setTimeout(function() { c.abort(); }, 15000); return c.signal; })()
+            });
+            if (resp.ok) {
+              if (st) { st.textContent = "连接成功 ✓"; st.style.color = "#88cc88"; }
+            } else {
+              var txt = "";
+              try { txt = await resp.text(); } catch (_e) {}
+              if (st) { st.textContent = "API 返回错误 " + resp.status + (txt ? "：" + txt.slice(0, 100) : ""); st.style.color = "#cc8888"; }
+            }
+          } catch (e) {
+            if (st) { st.textContent = "连接失败：" + (e.message || e); st.style.color = "#cc8888"; }
+          }
+        }
+
+        // ---- 存档列表 ----
+        function loadSaveList() {
+          var listEl = qs("save-load-list");
+          var stEl   = qs("save-load-status");
+          if (!listEl) return;
+          try {
+            var idxRaw = localStorage.getItem(SAVE_INDEX_KEY);
+            var ids = idxRaw ? JSON.parse(idxRaw) : [];
+            if (!Array.isArray(ids)) ids = [];
+            if (ids.length === 0) {
+              listEl.innerHTML = '<p style="color:#667788;text-align:center;padding:1rem;">暂无存档</p>';
+              return;
+            }
+            var html = "";
+            ids.forEach(function(id) {
+              var raw = localStorage.getItem(SAVE_PREFIX + id);
+              var summary = { playerName: "???", doctorLevel: "???", clinicalHours: 0, worldTimeString: "" };
+              try {
+                var save = JSON.parse(raw);
+                if (save && save.fateChoice) summary.playerName = save.fateChoice.playerName || "???";
+                if (save && save.doctorLevel) summary.doctorLevel = (save.doctorLevel.major||"") + "·" + (save.doctorLevel.minor||"");
+                if (save) summary.clinicalHours = save.clinicalHours || 0;
+                if (save) summary.worldTimeString = save.worldTimeString || "";
+              } catch (_e) {}
+              html += '<div class="save-load-item" data-save-id="' + id + '">'
+                    + '<div class="save-load-item-info">'
+                    + '<div class="save-load-item-name">' + escHtml(summary.playerName) + '</div>'
+                    + '<div class="save-load-item-meta">'
+                    + escHtml(summary.doctorLevel) + ' | 临床时数：' + summary.clinicalHours
+                    + (summary.worldTimeString ? ' | ' + escHtml(summary.worldTimeString) : '')
+                    + '</div></div>'
+                    + '<button class="save-load-item-delete" data-delete-id="' + id + '">删除</button>'
+                    + '</div>';
+            });
+            listEl.innerHTML = html;
+            if (stEl) stEl.textContent = "";
+          } catch (e) {
+            listEl.innerHTML = '<p style="color:#cc8888;">读取存档列表失败</p>';
+          }
+        }
+
+        function openSaveLoad() {
+          var root = qs("save-load-root");
+          if (!root) return;
+          root.classList.remove("hidden");
+          root.setAttribute("aria-hidden", "false");
+          document.body.style.overflow = "hidden";
+          loadSaveList();
+        }
+
+        function closeSaveLoad() {
+          var root = qs("save-load-root");
+          if (!root) return;
+          root.classList.add("hidden");
+          root.setAttribute("aria-hidden", "true");
+          document.body.style.overflow = "";
+        }
+
+        function deleteSaveById(id) {
+          if (!confirm("确定删除这个存档吗？此操作不可撤销。")) return;
+          try {
+            localStorage.removeItem(SAVE_PREFIX + id);
+            var idxRaw = localStorage.getItem(SAVE_INDEX_KEY);
+            var ids = idxRaw ? JSON.parse(idxRaw) : [];
+            ids = ids.filter(function(x) { return x !== id; });
+            localStorage.setItem(SAVE_INDEX_KEY, JSON.stringify(ids));
+            // 如果删除的是活跃存档，清除引用
+            if (localStorage.getItem(ACTIVE_SAVE_ID_KEY) === id) {
+              localStorage.removeItem(ACTIVE_SAVE_ID_KEY);
+            }
+          } catch (_e) {}
+          loadSaveList();
+        }
+
+        function loadSaveAndGo(id) {
+          try {
+            var raw = localStorage.getItem(SAVE_PREFIX + id);
+            if (!raw) { alert("存档数据不存在"); return; }
+            var save = JSON.parse(raw);
+            // 直接写入 bootstrap（而不是用 fateChoice 重建）
+            var bootstrap = {
+              fateChoice: save.fateChoice || null,
+              game: save
+            };
+            sessionStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(bootstrap));
+            localStorage.setItem(ACTIVE_SAVE_ID_KEY, id);
+            window.location.href = "./main.html";
+          } catch (e) {
+            alert("读档失败：" + (e.message || e));
+          }
+        }
+
+        function deleteAllSaves() {
+          if (!confirm("确定清除所有存档吗？此操作不可撤销。")) return;
+          try {
+            var idxRaw = localStorage.getItem(SAVE_INDEX_KEY);
+            var ids = idxRaw ? JSON.parse(idxRaw) : [];
+            ids.forEach(function(id) { localStorage.removeItem(SAVE_PREFIX + id); });
+            localStorage.setItem(SAVE_INDEX_KEY, JSON.stringify([]));
+            localStorage.removeItem(ACTIVE_SAVE_ID_KEY);
+          } catch (_e) {}
+          loadSaveList();
+        }
+
+        function escHtml(s) {
+          return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+
+        // ---- 开始新人生 ----
+        function startNewLife() {
+          if (!isApiConfigured()) {
+            openApiSettings();
+            return;
+          }
+          // 隐藏启动画面，显示人生选择
+          qs("splash-screen").style.display = "none";
+          var creationScreen = qs("character-creation-screen");
+          creationScreen.classList.remove("hidden");
+          creationScreen.setAttribute("aria-hidden", "false");
+          // 触发 fateChoiceController 初始化（如果已加载）
+          if (window.PsyFateChoiceController && window.PsyFateChoiceController.init) {
+            window.PsyFateChoiceController.init();
+          }
+        }
+
+        // ---- 事件绑定 ----
+        function bindEvents() {
+          refreshApiGateUi();
+
+          qs("start-new-life-btn").addEventListener("click", startNewLife);
+
+          qs("load-life-btn").addEventListener("click", function() {
+            if (!isApiConfigured()) { openApiSettings(); return; }
+            openSaveLoad();
+          });
+
+          qs("api-settings-btn").addEventListener("click", openApiSettings);
+
+          // API 弹窗事件
+          qs("api-settings-save-btn").addEventListener("click", saveApiSettings);
+          qs("api-settings-clear-btn").addEventListener("click", clearApiSettings);
+          qs("api-settings-test-btn").addEventListener("click", testApiSettings);
+
+          document.querySelectorAll("[data-api-settings-close]").forEach(function(el) {
+            el.addEventListener("click", closeApiSettings);
+          });
+
+          // 存档弹窗事件
+          qs("save-load-refresh-btn").addEventListener("click", loadSaveList);
+          qs("save-load-delete-all-btn").addEventListener("click", deleteAllSaves);
+
+          document.querySelectorAll("[data-save-load-close]").forEach(function(el) {
+            el.addEventListener("click", closeSaveList);
+          });
+
+          // 存档列表点击（委托）
+          qs("save-load-list").addEventListener("click", function(e) {
+            var item = e.target.closest(".save-load-item");
+            var delBtn = e.target.closest(".save-load-item-delete");
+            if (delBtn) {
+              e.stopPropagation();
+              var id = delBtn.getAttribute("data-delete-id");
+              if (id) deleteSaveById(id);
+              return;
+            }
+            if (item) {
+              var id = item.getAttribute("data-save-id");
+              if (id) loadSaveAndGo(id);
+            }
+          });
+
+          // 对话框事件
+          document.querySelectorAll("[data-psy-dialog-close]").forEach(function(el) {
+            el.addEventListener("click", function() {
+              qs("psy-dialog-root").classList.add("hidden");
+            });
+          });
+
+          // 特质弹窗事件
+          document.querySelectorAll("[data-psy-trait-modal-close]").forEach(function(el) {
+            el.addEventListener("click", function() {
+              qs("psy-trait-detail-root").classList.add("hidden");
+            });
+          });
+
+          // Escape 关闭模态
+          document.addEventListener("keydown", function(e) {
+            if (e.key === "Escape") {
+              closeApiSettings();
+              closeSaveLoad();
+              qs("psy-dialog-root").classList.add("hidden");
+              qs("psy-trait-detail-root").classList.add("hidden");
+            }
+          });
+
+          // 初始检查：如果 API 未配置，首页按钮置灰
+          refreshApiGateUi();
+        }
+
+        // ---- 启动 ----
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", bindEvents);
+        } else {
+          bindEvents();
+        }
+      })();
+    </script>
+  </body>
+</html>
