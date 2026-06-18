@@ -21,13 +21,22 @@
   <div id="results"></div>
   <div id="summary"></div>
 
-  <!-- Load bridge.js and logPanel.js in isolation -->
+  <!-- Load bridge.js, logPanel.js and dev_api_config.js -->
   <script src="./silly_tarven/bridge.js?v=20260618"></script>
   <script src="./js/log/logPanel.js?v=20260618"></script>
+  <script src="./js/dev_api_config.js?v=20260618"></script>
 
   <script>
   (function () {
     "use strict";
+
+    // ===== 自动设置测试 API key（开发环境/单元测试使用） =====
+    if (typeof PsyDevApiConfig !== "undefined") {
+      PsyDevApiConfig.setupTestConfig();
+      var cfg = PsyDevApiConfig.getActiveConfig();
+      console.log("[test] 开发 API 配置: model=" + cfg.model + " url=" + cfg.apiUrl + " hasKey=" + cfg.hasKey);
+    }
+    // =========================================================
     var results = document.getElementById("results");
     var summary = document.getElementById("summary");
     var passCount = 0, failCount = 0, skipCount = 0;

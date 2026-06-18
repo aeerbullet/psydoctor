@@ -1,0 +1,36 @@
+# ─── 本地开发配置 ───
+.claude/
+
+# ─── 敏感信息：API Key ───
+spec/test_api_key.md
+
+# ─── 操作系统文件 ───
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# ─── IDE/编辑器 ───
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# ─── Node.js ───
+node_modules/
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ─── Python 临时文件 ───
+__pycache__/
+*.pyc
+*.pyo
+
+# ─── 临时文件 ───
+*.log
+.tmp/
+temp/

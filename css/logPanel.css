@@ -143,6 +143,10 @@
   white-space: pre-wrap;
 }
 
+/* psydoctor log category colors */
+.mj-log-msg:first-line { font-weight: 600; }
+.mj-log-msg:has(+ .mj-log-msg) { margin-bottom: 2px; }
+
 @media (max-width: 480px) {
   #mj-log-panel {
     right: 8px;
