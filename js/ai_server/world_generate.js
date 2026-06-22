@@ -57,7 +57,7 @@
     var PsyDoctorAiPreset = global.PsyDoctorAiPreset;
     var systemPrompt = "";
     if (PsyDoctorAiPreset) {
-      systemPrompt = PsyDoctorAiPreset.assembleSystemPrompt(G, fc, {});
+      systemPrompt = PsyDoctorAiPreset.buildSystemPrompt(G, fc);
     }
     if (!systemPrompt) {
       systemPrompt = "你是一个心理医生成长叙事的AI。请根据命运抉择生成开局叙事。";
@@ -83,7 +83,7 @@
       var log = global.GameLog || global.console;
       (log.log || console.log)("[psy:ai] 开局剧情生成完成 (" + elapsed + "s)");
 
-      var text = result.text || "";
+      var text = result || "";
 
       // 提取叙事正文
       var storyBody = "";

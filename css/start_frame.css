@@ -278,6 +278,12 @@ body {
   justify-content: center;
 }
 
+/* Modal 内的按钮不应继承 splash 页面的 min-width（240px），否则 3 个按钮排不下 */
+.splash-modal-actions .splash-btn {
+  min-width: 0;
+  flex: 1;
+}
+
 /* ===== Save load list ===== */
 .save-load-list {
   max-height: 280px;

@@ -81,7 +81,7 @@
       var log = global.GameLog || global.console;
       (log.log || console.log)("[psy:ai] 开局配置完成 (" + elapsed + "s)");
 
-      var text = result.text || "";
+      var text = result || "";
       var PsyDoctorStoryGenerate = global.PsyDoctorStoryGenerate;
       var extractTag = PsyDoctorStoryGenerate ? PsyDoctorStoryGenerate.extractTag : function(t, n) { var r = new RegExp("<" + n + ">([\\s\\S]*?)<\\/" + n + ">","i"); var m = r.exec(t); return m ? m[1].trim() : ""; };
       var extractJSON = PsyDoctorStoryGenerate ? PsyDoctorStoryGenerate.extractJSONTag : function(t, n) { try { var c = extractTag(t, n); return c ? JSON.parse(c) : null; } catch(e) { return null; } };

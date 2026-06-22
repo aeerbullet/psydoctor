@@ -21,9 +21,9 @@
 
 ### 1.1.2 验证
 
-- [ ] 确认 `bridge.js` 在 psydoctor 中可正常调用（API 连通性测试）
-- [ ] 确认 `logPanel.js` 在 psydoctor 中可正常劫持 console
-- [ ] 确认 `index.html` 和 `main.html` 可正常打开（无 JS 报错）
+- [x] 确认 `bridge.js` 在 psydoctor 中可正常调用（API 连通性测试）
+- [x] 确认 `logPanel.js` 在 psydoctor 中可正常劫持 console
+- [x] 确认 `index.html` 和 `main.html` 可正常打开（无 JS 报错）
 
 ---
 

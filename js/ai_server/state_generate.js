@@ -44,10 +44,10 @@
       (log.log || console.log)("[psy:ai] 状态AI完成 (" + elapsed + "s)");
 
       // 应用状态
-      var appResult = applyStateTurnFromAssistantText(G, result.text || "");
+      var appResult = applyStateTurnFromAssistantText(G, result || "");
 
       return {
-        text: result.text,
+        text: result,
         appResult: appResult,
       };
     });

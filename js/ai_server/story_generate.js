@@ -32,8 +32,8 @@
 
     var systemPrompt = "";
     if (PsyDoctorAiPreset) {
-      systemPrompt = PsyDoctorAiPreset.assembleSystemPrompt(G, fc, {
-        worldBookText: worldBookText,
+      systemPrompt = PsyDoctorAiPreset.buildSystemPrompt(G, fc, null, {
+        knowledgeBaseText: worldBookText,
       });
     }
     if (!systemPrompt) {
@@ -118,7 +118,8 @@
 
     var options = {
       messages: messages,
-      onChunk: onChunk,
+      should_stream: !!onChunk,
+      onDelta: onChunk,
       signal: signal,
     };
 
@@ -127,18 +128,19 @@
     return TavernHelper.generateFromMessages(options).then(function (result) {
       var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       var log = global.GameLog || global.console;
-      (log.log || console.log)("[psy:ai] 叙事AI生成完成 (" + elapsed + "s) token:" + (result.usage ? JSON.stringify(result.usage) : "?"));
+      (log.log || console.log)("[psy:ai] 叙事AI生成完成 (" + elapsed + "s)");
 
-      // 解析标签
+      // 用完整管线解析回复（meta-leak 剥离 + story body 提取）
+      var pipeline = resolveStoryReplyForPipeline(result || "");
       var response = {
-        text: result.text || "",
-        storyBody: extractTag(result.text, "psy_story_body"),
-        actionSuggestions: extractJSONTag(result.text, "psy_action_suggestions"),
-        theoryInsight: extractJSONTag(result.text, "psy_theory_insight"),
-        philosophyReflection: extractJSONTag(result.text, "psy_philosophy_reflection"),
-        caseSessionTrigger: extractJSONTag(result.text, "psy_case_session_trigger"),
-        ethicalDilemma: extractJSONTag(result.text, "psy_ethical_dilemma"),
-        rawText: result.text,
+        text: result || "",
+        storyBody: pipeline.sansLeak,
+        actionSuggestions: extractJSONTag(result, "psy_action_suggestions"),
+        theoryInsight: extractJSONTag(result, "psy_theory_insight"),
+        philosophyReflection: extractJSONTag(result, "psy_philosophy_reflection"),
+        caseSessionTrigger: extractJSONTag(result, "psy_case_session_trigger"),
+        ethicalDilemma: extractJSONTag(result, "psy_ethical_dilemma"),
+        rawText: result,
       };
 
       if (callbacks.onComplete) callbacks.onComplete(response);
@@ -173,11 +175,114 @@
     }
   }
 
+  // ===== Meta-Leak 剥离：去除模型输出的推理/思考过程 =====
+  var META_LEAK_MARKERS = [
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Analyzing\\b",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Reflection\\b",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Planning\\b",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Thought\\s*process\\b",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Final\\s+answer\\b",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Note\\s+to\\s*self\\b",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*My\\s+Current\\s+Circumstances\\b",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Course\\s+of\\s+Action\\b",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Scene\\s*analysis\\b",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Setting\\s*:",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*The\\s+Incident\\s*:",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*My\\s+Skills\\s*:",
+    "(?:^|\\n+)\\s*\\*{0,2}\\s*Interaction\\s*:",
+    "(?:^|\\n+)\\s*Okay,?\\s+so\\s+here'?s\\b",
+    "(?:^|\\n+)\\s*Thinking\\s+about\\s+my\\b",
+    "(?:^|\\n+)\\s*This\\s+gives\\s+me\\s+the\\s+following\\b",
+    "(?:^|\\n+)\\s*Given\\s+my\\s+circumstances\\b",
+    "(?:^|\\n+)\\s*I\\s+now\\s+need\\s+to\\b",
+    "(?:^|\\n+)\\s*I\\s+decide\\s+I\\s+need\\s+to\\b",
+    "(?:^|\\n+)\\s*As\\s+I\\s+make\\s+my\\s+way\\b",
+    "(?:^|\\n+)\\s*I've\\s+just\\s+finished\\b",
+    "(?:^|\\n+)\\s*I've\\s+been\\s+",
+    "(?:^|\\n+)\\s*I\\s+need\\s+to\\b",
+    "(?:^|\\n+)\\s*My\\s+focus\\s+",
+    "(?:^|\\n+)\\s*My\\s+goal\\??\\b",
+    "(?:^|\\n+)\\s*The\\s+user\\s+wants\\b",
+    "(?:^|\\n+)\\s*Let\\s+me\\s+(?:analyze|think|start|begin)\\b",
+    "(?:^|\\n+)\\s*Now\\s+I\\s+will\\b",
+    "(?:^|\\n+)\\s*Initially,?\\s+I\\s+",
+    // 中文推理标记
+    "(?:^|\\n+)\\s*好的[，,].*?(?:用户|角色|我\\s*需要)",
+    "(?:^|\\n+)\\s*我\\s*(?:需要|得|要)\\s*(?:考虑|生成|输出|构建|写|确保|注意)",
+    "(?:^|\\n+)\\s*看来最合适",
+    "(?:^|\\n+)\\s*在叙事上我要",
+    "(?:^|\\n+)\\s*最后回复要",
+    "(?:^|\\n+)\\s*我还得考虑后续",
+    "(?:^|\\n+)\\s*我得考虑",
+    "(?:^|\\n+)\\s*首先[，,].*?让我",
+    "(?:^|\\n+)\\s*思考[：:]",
+    "(?:^|\\n+)\\s*我来(?:分析|思考|考虑|设计|规划)",
+    "(?:^|\\n+)\\s*用户(?:提供|要求|希望|想要|给(?:了|出))",
+  ];
+
+  /** 剥离模型元叙述/推理文本 */
+  function stripStoryAiMetaLeakFromNarrative(text) {
+    var s = String(text || "");
+    var cut = -1;
+    for (var mi = 0; mi < META_LEAK_MARKERS.length; mi++) {
+      var re = new RegExp(META_LEAK_MARKERS[mi], "im");
+      var m = re.exec(s);
+      if (m && typeof m.index === "number") {
+        if (cut < 0 || m.index < cut) cut = m.index;
+      }
+    }
+    if (cut < 0) return s;
+    var tagPos = s.indexOf("<psy_", cut);
+    var head = s.slice(0, cut).replace(/\s+$/, "");
+    if (tagPos >= 0) {
+      var tail = s.slice(tagPos).replace(/^\s+/, "");
+      if (tail) return head ? head + "\n\n" + tail : tail;
+    }
+    return head;
+  }
+
+  /** 流式输出预览：已出现 <psy_story_body> 则只展示标签内片段，避免把前置推理显示到聊天区 */
+  function visibleNarrativeForStreamingChunk(full) {
+    var s = String(full || "");
+    var i0 = s.indexOf("<psy_story_body>");
+    if (i0 < 0) return "";
+    var start = i0 + "<psy_story_body>".length;
+    var i1 = s.indexOf("</psy_story_body>", start);
+    var chunk = i1 >= 0 ? s.slice(start, i1) : s.slice(start);
+    var body = stripStoryAiMetaLeakFromNarrative(chunk);
+    if (i1 >= 0 && !String(body || "").trim() && i0 > 0) {
+      return stripStoryAiMetaLeakFromNarrative(s.slice(0, i0));
+    }
+    return body;
+  }
+
+  /** 完整回复管线：提取 <psy_story_body> + 剥离 meta-leak + 保留机器标签 */
+  function resolveStoryReplyForPipeline(text) {
+    var raw = String(text || "");
+    var i0 = raw.indexOf("<psy_story_body>");
+    var i1 = i0 >= 0 ? raw.indexOf("</psy_story_body>", i0 + "<psy_story_body>".length) : -1;
+    if (i0 >= 0 && i1 > i0 + "<psy_story_body>".length) {
+      var inner = raw.slice(i0 + "<psy_story_body>".length, i1).trim();
+      inner = stripStoryAiMetaLeakFromNarrative(inner);
+      if (!String(inner || "").trim() && i0 > 0) {
+        var headBefore = raw.slice(0, i0).trim();
+        if (headBefore) inner = stripStoryAiMetaLeakFromNarrative(headBefore);
+      }
+      var afterClose = raw.slice(i1 + "</psy_story_body>".length).replace(/^\s+/, "");
+      var sansLeak = afterClose ? inner + "\n\n" + afterClose : inner;
+      return { sansLeak: sansLeak, usedBodyEnvelope: true };
+    }
+    return { sansLeak: stripStoryAiMetaLeakFromNarrative(raw), usedBodyEnvelope: false };
+  }
+
   // ===== 暴露 API =====
   global.PsyDoctorStoryGenerate = {
     buildMessages: buildMessages,
     sendTurn: sendTurn,
     extractTag: extractTag,
     extractJSONTag: extractJSONTag,
+    stripStoryAiMetaLeakFromNarrative: stripStoryAiMetaLeakFromNarrative,
+    visibleNarrativeForStreamingChunk: visibleNarrativeForStreamingChunk,
+    resolveStoryReplyForPipeline: resolveStoryReplyForPipeline,
   };
 })(typeof window !== "undefined" ? window : globalThis);

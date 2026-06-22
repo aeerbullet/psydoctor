@@ -100,8 +100,6 @@
     if (delta) {
       const c = delta.content;
       if (c != null && String(c) !== "") parts.push(String(c));
-      const rc = delta.reasoning_content;
-      if (rc != null && String(rc) !== "") parts.push(String(rc));
       const t = delta.text;
       if (t != null && String(t) !== "") parts.push(String(t));
     }
@@ -112,7 +110,7 @@
     return parts.join("");
   }
 
-  /** 非流式 chat/completions 整段 JSON 中助手正文的常见路径（与 extractOpenAiStreamDeltaText 对齐思路） */
+  /** 非流式 chat/completions 整段 JSON 中助手正文的常见路径 */
   function extractOpenAiNonStreamMessageText(data) {
     if (!data || typeof data !== "object") return "";
     const ch0 = data.choices && data.choices[0];
@@ -122,8 +120,6 @@
     if (msg) {
       const c = msg.content;
       if (c != null && String(c) !== "") parts.push(String(c));
-      const rc = msg.reasoning_content;
-      if (rc != null && String(rc) !== "") parts.push(String(rc));
     }
     const legacy = ch0.text;
     if (legacy != null && String(legacy) !== "") parts.push(String(legacy));

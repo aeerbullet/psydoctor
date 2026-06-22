@@ -271,16 +271,25 @@
       } else if (msg.role === "assistant") {
         var div3 = document.createElement("div");
         div3.className = "psy-chat-msg psy-chat-msg--assistant";
-        // 尝试提取 story body
-        var body = "";
-        var re = /<psy_story_body>([\s\S]*?)<\/psy_story_body>/i;
-        var m = re.exec(msg.content || "");
-        body = m ? m[1].trim() : msg.content;
-        div3.textContent = body;
+        div3.textContent = cleanAssistantContent(msg.content || "");
         log.appendChild(div3);
       }
     });
     log.scrollTop = log.scrollHeight;
+  }
+
+  /** 清理 assistant 消息：提取 <psy_story_body> 正文，否则去掉所有 <psy_*> 标签，再剥离 meta-leak */
+  function cleanAssistantContent(content) {
+    if (!content) return "";
+    // 优先提取 <psy_story_body> 叙事正文
+    var m = /<psy_story_body>([\s\S]*?)<\/psy_story_body>/i.exec(content);
+    var body = m ? m[1].trim() : content.replace(/<psy_[a-z_]+>[\s\S]*?<\/psy_[a-z_]+>/gi, '').trim();
+    // 剥离 meta-leak（如有 stripStoryAiMetaLeakFromNarrative 可用）
+    var PsyDoctorStoryGenerate = global.PsyDoctorStoryGenerate;
+    if (PsyDoctorStoryGenerate && typeof PsyDoctorStoryGenerate.stripStoryAiMetaLeakFromNarrative === "function") {
+      return PsyDoctorStoryGenerate.stripStoryAiMetaLeakFromNarrative(body);
+    }
+    return body;
   }
 
   // ===== 显示等级晋升通知 =====

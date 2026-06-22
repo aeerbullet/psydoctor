@@ -138,9 +138,14 @@
     showProcessLog("story", "叙事 AI 生成中…");
 
     return PsyDoctorStoryGenerate.sendTurn(userText, G, fc, {
-      onChunk: function (chunk) {
-        // 流式追加
-        appendChatMessage(chunk, "assistant", true);
+      onChunk: function (chunk, full) {
+        // 流式输出：用前置过滤器只显示 <psy_story_body> 内的内容，隐藏推理文本
+        var visible = PsyDoctorStoryGenerate.visibleNarrativeForStreamingChunk(full);
+        if (visible) {
+          appendChatMessage(visible, "assistant", true);
+        } else if (full && full.indexOf("<psy_story_body>") < 0) {
+          // 还没出现正文标签时完全隐藏（模型仍在输出推理）
+        }
       },
       onError: function (err) {
         showProcessLog("story", "叙事 AI 失败", true);
@@ -152,6 +157,23 @@
       // 写入 chatHistory（完整含标签）
       if (response && response.text) {
         G.chatHistory.push({ role: "assistant", content: response.text });
+      }
+
+      // 完整管线解析，用 resolveStoryReplyForPipeline 而非简单提取
+      var storyToShow = response && response.storyBody ? response.storyBody : stripPsyTags(response ? response.text : "");
+      if (storyToShow) {
+        var log = _dom.chatLog;
+        if (log) {
+          var lastAssistant = log.querySelector(".psy-chat-msg--assistant:last-child");
+          if (lastAssistant) {
+            // 替换流式渲染的原始文本为干净正文
+            var cleaned = PsyDoctorStoryGenerate.stripStoryAiMetaLeakFromNarrative(storyToShow);
+            lastAssistant.textContent = cleaned || storyToShow;
+          } else {
+            // 非流式模式，直接追加（已经过 pipeline 剥离）
+            appendChatMessage(storyToShow, "assistant");
+          }
+        }
       }
 
       // 检查个案触发
@@ -355,11 +377,17 @@
     var log = _dom.chatLog;
     if (!log || !text) return;
 
+    // 非流式 assistant 消息剥离标签，防止泄漏
+    if (role === "assistant" && !isStream) {
+      text = stripPsyTags(text);
+      if (!text) return;
+    }
+
     if (isStream) {
-      // 流式追加：找到或创建最后一条 assistant 消息
+      // 流式消息已由 visibleNarrativeForStreamingChunk 过滤，无需再剥离
       var last = log.lastElementChild;
       if (last && last.classList.contains("psy-chat-msg--assistant")) {
-        last.textContent += text;
+        last.textContent = text; // 替换而不是追加，因为 streaming filter 的每次调用都基于 full 文本
       } else {
         var div = document.createElement("div");
         div.className = "psy-chat-msg psy-chat-msg--assistant";
@@ -382,6 +410,16 @@
   // ===== 工具函数 =====
   function escHtml(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  /** 剥离 AI 回复中的 <psy_*> 标签，仅保留可见文本 */
+  function stripPsyTags(text) {
+    if (!text) return "";
+    // 优先提取 <psy_story_body> 叙事正文
+    var m = /<psy_story_body>([\s\S]*?)<\/psy_story_body>/i.exec(text);
+    if (m) return m[1].trim();
+    // 回退：去掉所有 <psy_*>...</psy_*> 块
+    return text.replace(/<psy_[a-z_]+>[\s\S]*?<\/psy_[a-z_]+>/gi, '').trim();
   }
 
   function closeModal(rootId) {
