@@ -166,8 +166,8 @@
         if (log) {
           var lastAssistant = log.querySelector(".psy-chat-msg--assistant:last-child");
           if (lastAssistant) {
-            // 替换流式渲染的原始文本为干净正文
-            var cleaned = PsyDoctorStoryGenerate.stripStoryAiMetaLeakFromNarrative(storyToShow);
+            // 替换流式渲染的原始文本为干净正文（剥离 <psy_*> 避免泄漏）
+            var cleaned = PsyDoctorStoryGenerate.stripStoryAiMetaLeakFromNarrative(stripPsyTags(storyToShow));
             lastAssistant.textContent = cleaned || storyToShow;
           } else {
             // 非流式模式，直接追加（已经过 pipeline 剥离）
@@ -297,8 +297,10 @@
         btn.textContent = (labels[level] || level) + "：" + text;
         btn.setAttribute("data-text", text);
         btn.classList.remove("hidden");
+        btn.removeAttribute("hidden");
       } else {
         btn.classList.add("hidden");
+        btn.setAttribute("hidden", "");
       }
     });
   }
@@ -412,14 +414,35 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  /**
+   * 获取共享的机器标签剥离函数（优先使用 PsyDoctorStoryGenerate.stripAllPsyMachineTags）
+   */
+  function getMachineTagStripper() {
+    var PsyDoctorStoryGenerate = global.PsyDoctorStoryGenerate;
+    if (PsyDoctorStoryGenerate && typeof PsyDoctorStoryGenerate.stripAllPsyMachineTags === "function") {
+      return PsyDoctorStoryGenerate.stripAllPsyMachineTags;
+    }
+    // 兜底：4 道查杀
+    return function (t) {
+      if (!t) return "";
+      var s = String(t);
+      s = s.replace(/<psy_[a-z_]+>[\s\S]*?<\/psy_[a-z_]+>/gi, '');
+      s = s.replace(/<psy_[a-z_]+[^>]*>[\s\S]*?<\/psy_[a-z_]+>/gi, '');
+      s = s.replace(/<psy_[a-z_]+[^>]*>/gi, '');
+      s = s.replace(/<\/psy_[a-z_]+[^>]*>/gi, '');
+      return s.trim();
+    };
+  }
+
   /** 剥离 AI 回复中的 <psy_*> 标签，仅保留可见文本 */
   function stripPsyTags(text) {
     if (!text) return "";
+    var stripTags = getMachineTagStripper();
     // 优先提取 <psy_story_body> 叙事正文
     var m = /<psy_story_body>([\s\S]*?)<\/psy_story_body>/i.exec(text);
-    if (m) return m[1].trim();
-    // 回退：去掉所有 <psy_*>...</psy_*> 块
-    return text.replace(/<psy_[a-z_]+>[\s\S]*?<\/psy_[a-z_]+>/gi, '').trim();
+    if (m) return stripTags(m[1]);
+    // 回退：去掉所有 <psy_*> 标签（含完整标签对和裸开标签）
+    return stripTags(text);
   }
 
   function closeModal(rootId) {
@@ -438,5 +461,6 @@
     runStoryAiTurn: runStoryAiTurn,
     runStateAiTurn: runStateAiTurn,
     appendChatMessage: appendChatMessage,
+    renderActionSuggestions: renderActionSuggestions,
   };
 })(typeof window !== "undefined" ? window : globalThis);

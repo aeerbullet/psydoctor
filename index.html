@@ -304,11 +304,13 @@
               var raw = localStorage.getItem(SAVE_PREFIX + id);
               var summary = { playerName: "???", doctorLevel: "???", clinicalHours: 0, worldTimeString: "" };
               try {
-                var save = JSON.parse(raw);
-                if (save && save.fateChoice) summary.playerName = save.fateChoice.playerName || "???";
-                if (save && save.doctorLevel) summary.doctorLevel = (save.doctorLevel.major||"") + "·" + (save.doctorLevel.minor||"");
-                if (save) summary.clinicalHours = save.clinicalHours || 0;
-                if (save) summary.worldTimeString = save.worldTimeString || "";
+                var parsed = JSON.parse(raw);
+                // 兼容两种存档格式：运行时存档为 {summary, game}，初始存档为原始 game 对象
+                var gameData = parsed.game || parsed;
+                if (gameData && gameData.fateChoice) summary.playerName = gameData.fateChoice.playerName || "???";
+                if (gameData && gameData.doctorLevel) summary.doctorLevel = (gameData.doctorLevel.major||"") + "·" + (gameData.doctorLevel.minor||"");
+                if (gameData) summary.clinicalHours = gameData.clinicalHours || 0;
+                if (gameData) summary.worldTimeString = gameData.worldTimeString || "";
               } catch (_e) {}
               html += '<div class="save-load-item" data-save-id="' + id + '">'
                     + '<div class="save-load-item-info">'
@@ -364,11 +366,12 @@
           try {
             var raw = localStorage.getItem(SAVE_PREFIX + id);
             if (!raw) { alert("存档数据不存在"); return; }
-            var save = JSON.parse(raw);
-            // 直接写入 bootstrap（而不是用 fateChoice 重建）
+            var parsed = JSON.parse(raw);
+            // 兼容两种存档格式：运行时存档为 {summary, game}，初始存档为原始 game 对象
+            var game = parsed.game || parsed;
             var bootstrap = {
-              fateChoice: save.fateChoice || null,
-              game: save
+              fateChoice: game.fateChoice || null,
+              game: game
             };
             sessionStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(bootstrap));
             localStorage.setItem(ACTIVE_SAVE_ID_KEY, id);

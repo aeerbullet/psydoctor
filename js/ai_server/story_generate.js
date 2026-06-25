@@ -250,10 +250,27 @@
     var i1 = s.indexOf("</psy_story_body>", start);
     var chunk = i1 >= 0 ? s.slice(start, i1) : s.slice(start);
     var body = stripStoryAiMetaLeakFromNarrative(chunk);
+    // 剥离 body 中可能混入的 <psy_*> 机器标签（流式防泄漏）
+    body = stripAllPsyMachineTags(body);
     if (i1 >= 0 && !String(body || "").trim() && i0 > 0) {
-      return stripStoryAiMetaLeakFromNarrative(s.slice(0, i0));
+      return stripAllPsyMachineTags(stripStoryAiMetaLeakFromNarrative(s.slice(0, i0)));
     }
     return body;
+  }
+
+  /** 剥离字符串中所有 <psy_*> 机器标签（含完整标签对、裸开标签、裸闭标签） */
+  function stripAllPsyMachineTags(text) {
+    if (!text) return "";
+    var s = String(text);
+    // 第一遍：剥离完整 <psy_*>...</psy_*> 标签对（含内容）
+    s = s.replace(/<psy_[a-z_]+>[\s\S]*?<\/psy_[a-z_]+>/gi, '');
+    // 第二遍：剥离带属性的完整标签对（如 <psy_action_suggestions type="json">）
+    s = s.replace(/<psy_[a-z_]+[^>]*>[\s\S]*?<\/psy_[a-z_]+>/gi, '');
+    // 第三遍：剥离残留的裸开标签 <psy_...>（含属性）
+    s = s.replace(/<psy_[a-z_]+[^>]*>/gi, '');
+    // 第四遍：剥离残留的裸闭标签 </psy_...>
+    s = s.replace(/<\/psy_[a-z_]+[^>]*>/gi, '');
+    return s.trim();
   }
 
   /** 完整回复管线：提取 <psy_story_body> + 剥离 meta-leak + 保留机器标签 */
@@ -269,10 +286,12 @@
         if (headBefore) inner = stripStoryAiMetaLeakFromNarrative(headBefore);
       }
       var afterClose = raw.slice(i1 + "</psy_story_body>".length).replace(/^\s+/, "");
-      var sansLeak = afterClose ? inner + "\n\n" + afterClose : inner;
+      // 剥离 afterClose 中的 <psy_*> 机器标签（含裸标签兜底），避免泄漏到显示文本
+      var cleanAfter = stripAllPsyMachineTags(afterClose);
+      var sansLeak = cleanAfter ? inner + "\n\n" + cleanAfter : inner;
       return { sansLeak: sansLeak, usedBodyEnvelope: true };
     }
-    return { sansLeak: stripStoryAiMetaLeakFromNarrative(raw), usedBodyEnvelope: false };
+    return { sansLeak: stripAllPsyMachineTags(stripStoryAiMetaLeakFromNarrative(raw)), usedBodyEnvelope: false };
   }
 
   // ===== 暴露 API =====
@@ -282,6 +301,7 @@
     extractTag: extractTag,
     extractJSONTag: extractJSONTag,
     stripStoryAiMetaLeakFromNarrative: stripStoryAiMetaLeakFromNarrative,
+    stripAllPsyMachineTags: stripAllPsyMachineTags,
     visibleNarrativeForStreamingChunk: visibleNarrativeForStreamingChunk,
     resolveStoryReplyForPipeline: resolveStoryReplyForPipeline,
   };

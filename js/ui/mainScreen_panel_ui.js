@@ -278,14 +278,30 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  /** 清理 assistant 消息：提取 <psy_story_body> 正文，否则去掉所有 <psy_*> 标签，再剥离 meta-leak */
+  /**
+   * 清理 assistant 消息：提取 <psy_story_body> 正文，否则去掉所有 <psy_*> 标签，再剥离 meta-leak
+   * 委托 PsyDoctorStoryGenerate.stripAllPsyMachineTags 处理标签剥离（四道查杀）
+   */
   function cleanAssistantContent(content) {
     if (!content) return "";
+    var PsyDoctorStoryGenerate = global.PsyDoctorStoryGenerate;
+    var stripTags = PsyDoctorStoryGenerate && typeof PsyDoctorStoryGenerate.stripAllPsyMachineTags === "function"
+      ? PsyDoctorStoryGenerate.stripAllPsyMachineTags
+      : function (t) {
+          if (!t) return "";
+          var s = String(t);
+          s = s.replace(/<psy_[a-z_]+>[\s\S]*?<\/psy_[a-z_]+>/gi, '');
+          s = s.replace(/<psy_[a-z_]+[^>]*>[\s\S]*?<\/psy_[a-z_]+>/gi, '');
+          s = s.replace(/<psy_[a-z_]+[^>]*>/gi, '');
+          s = s.replace(/<\/psy_[a-z_]+[^>]*>/gi, '');
+          return s.trim();
+        };
+
     // 优先提取 <psy_story_body> 叙事正文
     var m = /<psy_story_body>([\s\S]*?)<\/psy_story_body>/i.exec(content);
-    var body = m ? m[1].trim() : content.replace(/<psy_[a-z_]+>[\s\S]*?<\/psy_[a-z_]+>/gi, '').trim();
+    var body = m ? stripTags(m[1]) : stripTags(content);
+
     // 剥离 meta-leak（如有 stripStoryAiMetaLeakFromNarrative 可用）
-    var PsyDoctorStoryGenerate = global.PsyDoctorStoryGenerate;
     if (PsyDoctorStoryGenerate && typeof PsyDoctorStoryGenerate.stripStoryAiMetaLeakFromNarrative === "function") {
       return PsyDoctorStoryGenerate.stripStoryAiMetaLeakFromNarrative(body);
     }
