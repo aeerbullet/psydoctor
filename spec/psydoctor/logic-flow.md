@@ -10,26 +10,28 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │                      游戏主循环（Main Loop）                       │
 │                                                                   │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌───────────┐  │
-│  │ 用户输入  │ →  │ 叙事 AI  │ →  │ 状态 AI  │ →  │ 游戏更新   │  │
-│  │ (聊天框) │    │ (人生叙事)│    │ (状态同步)│    │ (面板刷新) │  │
-│  └──────────┘    └──────────┘    └──────────┘    └───────────┘  │
-│       ↑                                                │         │
-│       │           ┌──────────┐  ┌──────────┐          │         │
-│       │           │ 个案会话  │  │ 伦理困境  │          │         │
-│       │           │ (触发时) │  │ (触发时) │          │         │
-│       │           └──────────┘  └──────────┘          │         │
-│       └──────────────── 循环 ──────────────────────────┘         │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐     │
+│  │ 用户输入  │ → │ 世界 AI  │ → │ 角色 AI  │ → │ 状态 AI  │     │
+│  │ (聊天框) │   │(环境叙事)│   │(逐个发言)│   │(状态同步)│     │
+│  └──────────┘   └──────────┘   └──────────┘   └──────────┘     │
+│       ↑                              │            │              │
+│       │                              │            ▼              │
+│       │              ┌──────────┐    │     ┌───────────┐        │
+│       │              │ 个案会话  │    │     │ 游戏更新   │        │
+│       │              │ (触发时) │    │     │ (面板刷新) │        │
+│       │              └──────────┘    │     └───────────┘        │
+│       │                              │                           │
+│       └──────────── 循环 ────────────┘                           │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-每次玩家发言（或系统自动触发）执行一个完整的 **双回合 AI 管线**（叙事 AI → 状态 AI），随后界面刷新，检查特殊系统触发器（个案/伦理困境/反移情告警/理论里程碑），等待下一次输入。
+每次玩家发言执行一个完整的 **多角色 AI 管线**（世界 AI → 角色 AI(s) → 状态 AI），随后界面刷新，检查特殊系统触发器（个案/伦理困境/反移情告警/理论里程碑/失误告警/脱落预警），等待下一次输入。
 
-**与 mortal_journey 的关键差异**：
-- 个案会话（Case Session）替代战斗——非对抗模型，而是协作疗愈模型
-- 伦理困境可随时中断主循环（全屏模态）
-- 反移情告警是持续性的后台检测，非回合内触发
-- 理论学习是渐进累积而非装备式切换
+**v2.0 与旧架构的关键差异**：
+- 叙事 AI 拆分为世界 AI（场景叙事）+ 角色 AI（独立人格发言）——不再一人演所有角色
+- 咨询师内心活动不再需要——咨询师就是玩家
+- 新增治疗失误追踪 + 来访者脱落预警 + 声誉系统 + 执照危机（详见 architecture.md §12 + logic-flow.md §10-§13）
+- 每条 AI 调用的消息结构遵循前缀缓存优化（详见 architecture.md §5.6）
 
 ---
 
@@ -412,9 +414,11 @@ Phase 4: finishBootstrapGateSuccess()
 
 ---
 
-## 4. 主游戏回合流程（用户发言 → AI → 更新）
+## 4. 主游戏回合流程（v2.0 多角色 AI 管线）
 
-### 4.1 完整回合序列
+> v2.0 更新：原双回合管线（叙事 AI → 状态 AI）升级为多角色管线。详见 architecture.md §5。
+
+### 4.1 完整回合序列（v2.0）
 
 ```
 玩家在聊天框输入文本并点击发送（或点击行动建议按钮）
@@ -424,117 +428,61 @@ Phase 4: finishBootstrapGateSuccess()
 │ Step 1: handleChatSend(userText)                         │
 │   mainScreen_chat.js                                     │
 │                                                          │
-│   1.1 校验                                               │
-│     ├── 输入非空（trim 后长度 > 0）                        │
-│     ├── 非 AI 生成中（MJ_AI_GENERATING 标志检查）          │
-│     ├── 非个案会话中（activeCaseSession === null）         │
-│     └── 非伦理困境中（activeEthicalDilemma === null）     │
-│                                                          │
+│   1.1 校验（与旧架构一致）                                │
 │   1.2 预处理                                             │
-│     ├── trim + 规范化空白                                 │
 │     ├── 写入 G.chatHistory[{ role: "user", content }]     │
 │     ├── 渲染用户消息到聊天区                              │
-│     ├── 设置 PSY_AI_GENERATING = true（全局锁）           │
-│     └── 禁用发送按钮 + 显示「思考中...」动画               │
+│     └── 设置 PSY_AI_GENERATING = true                    │
 └──────────┬───────────────────────────────────────────────┘
            │
            ▼
 ┌──────────────────────────────────────────────────────────┐
-│ Step 2: runStoryAiTurn(userText)                         │
-│   story_generate.js                                      │
+│ Step 2: 世界 AI（World AI）— 1 次调用                    │
+│   world_ai.js                                            │
 │                                                          │
-│   2.1 构建消息                                           │
-│     ├── buildMessages(fc, G, userText, priorStoryRaw)    │
-│     │   ├── system 消息                                  │
-│     │   │   ├── 活跃叙事预设（activePreset.systemPrompt）  │
-│     │   │   │   └── 模板变量填充 {{PLAYER_NAME}}          │
-│     │   │   │       {{DOCTOR_LEVEL}} {{CLINICAL_HOURS}}等 │
-│     │   │   ├── 规则预设（10 个 PSY_STORY_RULE_PRESET_IDS）│
-│     │   │   └── 知识基底摘录                              │
-│     │   │       └── PsyDoctorWorldBook.selectEntries(     │
-│     │   │             scanText, { maxEntries: 8 })        │
-│     │   ├── 历史对话轮次（最近 N 轮）                     │
-│     │   └── 当前 user 消息                               │
-│     │       ├── 用户输入正文                              │
-│     │       ├── 运行时状态摘要                            │
-│     │       │   ├── 等级 + 8+2 属性                       │
-│     │       │   ├── 当前理论取向 + 掌握阶段                │
-│     │       │   ├── 临床时数 + 督导时数 + 个人体验时数     │
-│     │       │   ├── 哲学维度深度                          │
-│     │       │   └── 反移情状态摘要                        │
-│     │       ├── 来访者快照（currentClients 列表摘要）      │
-│     │       ├── 周围人物快照（nearbyPeople 列表摘要）      │
-│     │       ├── 职业生涯上下文（当前工作场景 + 活跃事件）   │
-│     │       └── 个案上下文（若有 activeCaseSession）       │
-│     │
-│   2.2 调用 AI（流式 + 超时 300s）                        │
-│     └── TavernHelper.generateFromMessages({              │
-│           messages, onChunk, signal })                    │
+│   2.1 构建消息（缓存友好：固定在前，变化在后）            │
+│     system: 叙事规则 + 世界设定 + 发言编排规则（固定）    │
+│     user: 玩家输入 + 游戏状态摘要 + 前文上下文（变化）    │
 │                                                          │
-│   2.3 流式渲染                                           │
-│     ├── onChunk → appendToChatArea(chunk) 打字效果        │
-│     └── 实时滚动到底部                                   │
+│   2.2 调用 AI（流式，超时 300s）                         │
+│     └── onChunk → 追加到聊天区（打字效果）                │
 │                                                          │
-│   2.4 解析标签                                           │
-│     ├── resolveStoryReplyForPipeline(text)                │
-│     │   └── 提取 <psy_story_body> 纯叙事正文             │
-│     ├── extractActionSuggestions(text)                    │
-│     │   └── 四级行动建议 → G.chatActionSuggestions        │
-│     ├── detectCaseSessionTrigger(text)                    │
-│     │   └── <psy_case_session_trigger> → G.pendingCaseSession│
-│     ├── detectEthicalDilemma(text)                        │
-│     │   └── <psy_ethical_dilemma> → G.activeEthicalDilemma│
-│     ├── extractTheoryInsight(text)                        │
-│     │   └── <psy_theory_insight> → 暂存待状态 AI 确认     │
-│     └── extractPhilosophyReflection(text)                 │
-│         └── <psy_philosophy_reflection> → 暂存待确认      │
-│                                                          │
-│   2.5 写入对话历史                                       │
-│     └── G.chatHistory.push({ role:"assistant", content }) │
+│   2.3 解析 <psy_scene_info> → speechSchedule             │
+│     └── 决定本回合谁发言、什么顺序                        │
 └──────────┬───────────────────────────────────────────────┘
            │
            ▼
 ┌──────────────────────────────────────────────────────────┐
-│ Step 3: 显示叙事 + 行动建议                               │
-│   mainScreen_chat.js                                     │
+│ Step 3: 角色 AI 串行调用 — N 次（N = speechSchedule 长度）│
+│   role_ai.js                                             │
 │                                                          │
-│   3.1 渲染叙事正文到聊天区（已完成流式渲染）                │
-│   3.2 渲染四级行动建议按钮                                │
-│     ├── 正面行动（aggressive）→ 蓝色按钮                 │
-│     ├── 中性行动（neutral）→ 灰色按钮                    │
-│     ├── 谨慎行动（cautious）→ 黄色按钮                   │
-│     └── 深度反思（veryCautious）→ 紫色按钮               │
-│   3.3 展示理论洞见/哲学反思提示（若有）                   │
-│     └── 小标签提示：「💡 对来访者中心治疗有了新的理解」    │
+│   for each turn in speechSchedule:                       │
+│     3.1 获取该角色的 speechProfile                       │
+│     3.2 构建消息：                                       │
+│       system: 角色人格描述（固定，命中专属 prefix cache） │
+│       user: 场景上下文 + 前文 + [前一发言者原文]          │
+│     3.3 调用 AI（流式，追加到聊天区）                    │
+│     3.4 保存当前发言 → 作为下一角色的输入                │
+│                                                          │
+│   ⚠️ 串行调用保证对话感：角色 B 知道角色 A 说了什么      │
+│   ⚠️ 同一角色同回合第二次发言 → system prompt 已缓存     │
+│        → 延迟明显低于第一次                               │
 └──────────┬───────────────────────────────────────────────┘
            │
            ▼
 ┌──────────────────────────────────────────────────────────┐
-│ Step 4: runStateAiTurn(priorStoryText)                   │
+│ Step 4: 状态 AI（State AI）— 1 次调用                    │
 │   state_generate.js                                      │
 │                                                          │
-│   4.1 构建状态 AI 请求                                   │
-│     ├── system prompt = 状态规则模板（state_rules.js）     │
-│     │   └── 含来访者状态更新规则/临床时数规则/反移情规则   │
-│     ├── user 消息                                       │
-│     │   ├── 叙事正文引用（priorStoryText）                │
-│     │   ├── 当前 PsyDoctorGame 完整快照                  │
-│     │   │   ├── 等级/属性/时数                           │
-│     │   │   ├── 来访者档案列表                           │
-│     │   │   ├── 理论掌握状态                             │
-│     │   │   ├── 反移情状态                               │
-│     │   │   ├── 藏书/工具列表                            │
-│     │   │   └── 职业生涯事件列表                         │
-│     │   └── 门闩完成后的状态同步要求                     │
-│     │       └── 若 psyInitStateAiApplied === false → 追加 │
-│     │           "本回合请同步周围人物"                     │
-│     │
-│   4.2 调用 AI（非流式，超时 60s）                        │
-│     └── TavernHelper.generateFromMessages({ messages })   │
-│                                                          │
-│   4.3 解析 AI 响应（多级容错）                            │
-│     └── applyStateTurnFromAssistantText(G, text)          │
-│         (详见 §4.2 状态应用详细流程)                      │
+│   4.1 拼接完整叙事                                       │
+│     └── 世界 AI 叙事 + 所有角色 AI 发言（按顺序）         │
+│   4.2 构建消息（缓存友好）                                │
+│     system: 状态规则模板（~2000 tokens，固定）            │
+│     user: 完整叙事 + 游戏状态快照（变化）                 │
+│   4.3 调用 AI（非流式，超时 60s）                        │
+│   4.4 解析标签 → 逐项校验 → 写回 G                       │
+│     └── 新增标签：psy_scene_info, psy_treatment_error,   │
+│         psy_reputation_event                             │
 └──────────┬───────────────────────────────────────────────┘
            │
            ▼
@@ -542,73 +490,76 @@ Phase 4: finishBootstrapGateSuccess()
 │ Step 5: 后处理与触发器检查                                │
 │   mainScreen_chat.js                                     │
 │                                                          │
-│   5.1 检查待处理的个案触发                                │
-│     ├── G.pendingCaseSession !== null?                   │
-│     │   └── YES → CaseSessionEngine.startCaseSession()   │
-│     │           (详见 §5 个案系统流程)                     │
-│     └── NO → 继续                                       │
-│                                                          │
-│   5.2 检查伦理困境触发                                    │
-│     ├── G.activeEthicalDilemma !== null?                 │
-│     │   └── YES → 弹出全屏伦理困境模态                    │
-│     │           (详见 §7 伦理困境流程)                     │
-│     └── NO → 继续                                       │
-│                                                          │
-│   5.3 检查理论里程碑                                      │
-│     ├── 遍历 theoryMastery                               │
-│     │   └── 任一项 hours 跨过阶段阈值?                    │
-│     │       └── YES → 弹出理论晋升提示                    │
-│     │           「🎓 你对认知治疗的理解已达"掌握"阶段」     │
-│     │       └── 检查整合条件（两个 theory 都 ≥ stage 4）   │
-│     │           └── YES → 解锁整合选项                   │
-│                                                          │
-│   5.4 检查反移情风险                                      │
-│     ├── CountertransferenceTracker.checkRisk(G)           │
-│     │   └── overallRiskLevel 变化?                       │
-│     │       ├── low → medium → 左下角黄色警告             │
-│     │       ├── medium → high → 弹窗建议接受督导          │
-│     │       └── high → critical → 强制暂停接案           │
-│     └── 更新 UI 风险指示器                               │
-│                                                          │
-│   5.5 检查职业生涯事件                                    │
-│     ├── activeCareerEvents 中有未处理的事件?              │
-│     │   └── deadline 临近? → 弹窗提醒                     │
-│     └── 完成的事件 → 移入 careerHistory                   │
+│   5.1 个案触发检查（pendingCaseSession）                  │
+│   5.2 伦理困境检查（activeEthicalDilemma）               │
+│   5.3 理论里程碑检查                                     │
+│   5.4 反移情风险检查                                     │
+│   5.5 治疗失误检查（新增 — treatment_error_tracker.js）   │
+│   5.6 来访者脱落风险检查（新增 — 四级预警）               │
+│   5.7 声誉事件检查（新增 — reputation_system.js）         │
+│   5.8 执照状态检查（新增 — license_crisis.js）            │
+│   5.9 等级晋升检查                                       │
 └──────────┬───────────────────────────────────────────────┘
            │
            ▼
 ┌──────────────────────────────────────────────────────────┐
 │ Step 6: 刷新 UI                                          │
-│   mainScreen_panel.js + mainScreen_panel_ui.js            │
 │                                                          │
-│   6.1 刷新左栏                                           │
-│     ├── renderLeftPanel(fc, G)                            │
-│     │   ├── 等级显示（大阶段·小阶段）                      │
-│     │   ├── 8+2 属性面板（数值 + 进度条）                  │
-│     │   ├── 临床时数/督导时数/个人体验时数                 │
-│     │   ├── 当前理论取向 + 掌握阶段                       │
-│     │   └── 哲学深度简表                                 │
-│     ├── renderBookShelfGrid(G)                            │
-│     └── renderTherapyToolGrid(G)                          │
-│                                                          │
-│   6.2 刷新右栏                                           │
-│     └── renderRightPanel(G)                              │
-│         ├── 来访者卡片列表（姓名 + 主诉 + 治疗阶段）       │
-│         ├── 督导/同行列表                                │
-│         └── 活跃职业事件指示                              │
-│                                                          │
-│   6.3 持久化快照                                         │
-│     └── persistBootstrapSnapshot()                       │
-│                                                          │
-│   6.4 解锁 UI                                            │
-│     ├── 启用发送按钮                                     │
-│     ├── 隐藏「思考中...」                                 │
-│     ├── 聚焦输入框                                       │
-│     └── 设置 PSY_AI_GENERATING = false                   │
+│   6.1 刷新左栏（等级/属性/理论/哲学）                     │
+│   6.2 刷新右栏（来访者卡片含脱落风险指示器）              │
+│   6.3 刷新风险仪表盘（新增 — 执业安全度/风险评分/声誉）   │
+│   6.4 持久化快照                                         │
+│   6.5 解锁 UI（启用发送、聚焦输入框）                     │
+│   6.6 缓存命中率日志（新增 — [psy:cache] 频道）           │
 └──────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 状态应用详细流程（applyStateTurnFromAssistantText）
+### 4.2 角色 AI 串行调用详细流程
+
+```
+runRoleAiPhase(speechSchedule, worldAiNarrative, G)
+  │
+  ├── 初始化
+  │   └── previousSpeeches = []
+  │   └── previousSpeakerOutput = null
+  │
+  ├── for (i = 0; i < speechSchedule.length; i++):
+  │   │
+  │   ├── 1. 获取角色 profile
+  │   │   └── profile = findRoleById(speechSchedule[i].id)
+  │   │       ├── 从 G.nearbyPeople 查找（督导师/同行）
+  │   │       └── 从 G.currentClients 查找（来访者）
+  │   │
+  │   ├── 2. 构建该角色的 system prompt（固定 → prefix cache）
+  │   │   └── buildRoleSystemPrompt(profile.speechProfile)
+  │   │       ├── roleType === "client" → 来访者人格模板
+  │   │       ├── roleType === "supervisor" → 督导师人格模板
+  │   │       └── roleType === "colleague" → 同行人格模板
+  │   │
+  │   ├── 3. 构建 user message
+  │   │   └── [
+  │   │         "【场景】" + worldAiNarrative,
+  │   │         "【前文】" + recentHistorySummary,
+  │   │         i > 0 ? "【前一个说话者】" + previousSpeakerOutput : "",
+  │   │         "【你的回合】请生成你的发言。",
+  │   │       ].join("\n")
+  │   │
+  │   ├── 4. 调用 AI（流式）
+  │   │   └── TavernHelper.generateFromMessages({ messages, onChunk })
+  │   │
+  │   ├── 5. 追加到聊天区
+  │   │   └── appendChatMessage("[角色名] " + text, "assistant")
+  │   │
+  │   └── 6. 保存上下文
+  │       ├── previousSpeakerOutput = text
+  │       └── previousSpeeches.push({ id, role, text })
+  │
+  └── 返回 { speeches: previousSpeeches, combinedText }
+```
+
+### 4.3 状态应用详细流程（applyStateTurnFromAssistantText）
+
+> 核心逻辑与旧架构一致。新增标签：`psy_scene_info`、`psy_treatment_error`、`psy_reputation_event`、`psy_speech_habits_update`。详见 architecture.md §12。
 
 ```
 applyStateTurnFromAssistantText(G, assistantText)
@@ -1395,10 +1346,158 @@ resolveEthicalDilemma(G, choiceIndex)
       │   └── 决策记录反映职业伦理成熟度
       └── 未来可能触发相同类型的困境（基于之前的决策模式）
 ```
+- Tier 3 伦理性失误（边界侵犯/保密违规等）触发伦理调查时，联动声誉系统（§12）和执照系统（§13）
 
 ---
 
-## 10. NPC 系统逻辑流程
+## 10. 治疗失误检测与追踪流程
+
+```
+每个个案回合完成后:
+  │
+  ├── Tier 1 即时检测:
+  │   ├── 查 INTERVENTION_DEFENSE_MATRIX(当前防御, 所选技术)
+  │   │   └── risky / dangerous → 记录 Tier 1 技术性失误
+  │   ├── alliance < 30 且选了高冲击技术 → 记录 Tier 1
+  │   ├── 连续 3 次同技术 → 记录 Tier 1（策略单一）
+  │   └── criticalMoments 中有 "treatment_crisis" 且选激进技术 → 记录 Tier 1
+  │
+  ├── Tier 2 跨回合检测:
+  │   ├── 连续 5 回合 defenseStrength 上升 → 报告"忽视阻抗信号"
+  │   ├── 超过 10 回合 symptomImprove < 5% → 报告"疗程停滞"
+  │   ├── alliance < 20 且连续 3 回合下降，未讨论治疗关系 → 报告
+  │   └── 超过 10 回合从未选 silentPresence → 报告"过度主导"
+  │
+  ├── Tier 3 叙事检测:
+  │   └── 解析 AI 输出中的 <psy_treatment_error> 标签
+  │       └── { type, severity, description, clientId, round }
+  │
+  ├── recordError(G, error):
+  │   ├── 写入 currentSessionErrors[]
+  │   ├── 更新 errorHistory[]
+  │   ├── 更新 activeWarnings[]
+  │   ├── consecutiveErrors++（连续≥3 → 触发督导警告）
+  │   └── 更新 errorStats.total{Technical|Strategic|Ethical}Errors
+  │
+  └── computeRiskScore(G):
+      └── RiskScore = CT_RISK×0.25 + ERROR_RISK×0.30 + DROPOUT_RISK×0.20
+                    + FATIGUE_RISK×0.15 + REPUTATION_RISK×0.10
+          └── 🟢 0-25 / 🟡 26-50 / 🟠 51-75 / 🔴 76-100
+```
+
+---
+
+## 11. 来访者脱落预警与执行流程
+
+```
+每个个案回合 + 状态 AI 后:
+
+1. computeDropoutRisk(client, sessionState, errors):
+     baseDropout = DROPOUT_BASE_TABLE[attachmentStyle] + caseDifficultyModifier
+     errorPenalty = SUM(recentErrors.severity × coefficient)
+     allianceBuffer = alliance >= 70 ? -20% : alliance < 30 ? +15% : 0%
+     dropoutRisk = baseDropout + errorPenalty - allianceBuffer
+     └── 钳制 [5, 99]
+
+2. checkDropoutThresholds(G, client):
+     risk < 30% → 🟢 green — 正常
+     risk 30-60% → 🟡 yellow — 来访者卡片显示黄点
+     risk 60-80% → 🟠 orange — 卡片闪烁 + "建议讨论治疗关系"
+     risk > 80% → 🔴 red — 全屏弹窗"来访者即将脱落！"
+
+3. 红灯后的分支:
+     玩家选共情回应 + allianceChange > +5 → attemptDropoutRecovery()
+       ├── 成功: 风险降至 50%, 获得 judgment +2
+       └── 失败: 风险 +15%, 加速脱落
+     玩家选其他 / allianceChange不足 → 脱落确认
+
+4. executeDropout(clientId):
+     ├── 从 currentClients 移除 → completedCases（标记 terminatedByDropout: true）
+     ├── 声誉 -5~15（根据外传抱怨概率）
+     ├── 反移情累积触发一次
+     ├── 临床时数: 当次无获得
+     ├── errorStats.clientDropouts++
+     └── 触发叙事 AI（世界 AI）：强制下一轮聚焦脱落事件
+```
+
+---
+
+## 12. 声誉事件与投诉处理流程
+
+```
+声誉事件来源（任意满足其一即触发）:
+
+1. applyReputationEvent(G, eventType, params):
+     ├── 查 REPUTATION_EVENT_TABLE → 三维增减值
+     ├── 应用钳制 [0, max]
+     ├── 记录到 careerHistory (type: "reputation_event")
+     ├── 检查声誉等级跨越:
+     │   crisis(<200): 转介几乎停止, 职业机会关闭
+     │   recovering(200-400): 转介正常, 机会偶尔
+     │   good(400-700): 转介良好, 机会定期
+     │   excellent(700-900): 可选择来访者, 机会频繁
+     │   legendary(900+): 自主定义, 传奇来访者
+     └── 调用 computeReferralQuality(G) 更新转介质量
+
+2. 投诉触发:
+     ├── checkComplaintRisk(G, client, error):
+     │   伦理失误 + 来访者受损 → 60%
+     │   脱落 + alliance<20 → 25%
+     │   脱落 + alliance<40 → 10%
+     │   连续3+ Tier 2失误 → 15%
+     │
+     ├── processComplaint(G, complaint):
+     │   ├── 创建 complaint 记录 → complaintHistory[]
+     │   ├── 声誉立即下降（专业声誉 -20~50）
+     │   └── 累计3+投诉 → 触发伦理委员会调查
+     │
+     └── processEthicsReview(G, complaints):
+         ├── 多回合审查流程（类似大阶段考试）
+         ├── 玩家回应: 诚实面对 / 推卸责任 / 部分承认
+         └── 结果: 无过失(声誉恢复, judgment+3)
+                / 轻微过失(声誉-20, 需督导)
+                / 中度过失(声誉-50, 暂停接案20回合)
+                / 严重过失(声誉-100, 执照暂停或吊销)
+```
+
+---
+
+## 13. 执照危机状态转换流程
+
+```
+执照状态机:
+  │
+  ├── checkLicenseStatus(G):
+  │   ├── 检查 complaintHistory 数量
+  │   ├── 检查 Tier 3 伦理失误记录
+  │   ├── 检查 countertransference.overallRiskLevel
+  │   └── 判断是否需要状态转换 → 返回 { statusChanged, newStatus, reason }
+  │
+  ├── 状态转换条件:
+  │   ACTIVE → UNDER_REVIEW: 累计3+投诉 / 单次严重伦理失误
+  │   UNDER_REVIEW → ACTIVE: 调查结果"无过失"
+  │   UNDER_REVIEW → SUSPENDED: 调查结果"中度过失"
+  │   UNDER_REVIEW → REVOKED: 严重伦理违规 / 调查结果"严重过失"
+  │   SUSPENDED → RESTRICTED: 暂停期满 + 条件满足（督导+个人体验）
+  │   RESTRICTED → ACTIVE: 评估通过 + 声誉≥200
+  │   REVOKED → 重建人生: 特殊分支，不可逆回 ACTIVE
+  │
+  ├── 各状态限制:
+  │   UNDER_REVIEW: currentClients max=现有, 不可新增
+  │   SUSPENDED: currentClients=[], 只能督导+个人体验+理论学习
+  │   RESTRICTED: currentClients max=3, 案例难度限制为低
+  │   REVOKED: 解锁替代职业路径（研究者/教师/作者）
+  │
+  └── transitionLicenseStatus(G, newStatus):
+      ├── 更新 G.licenseStatus
+      ├── 应用新状态限制
+      ├── 记录到 careerHistory
+      └── 触发对应的叙事线（世界 AI 在下一轮生成危机叙事）
+```
+
+---
+
+## 14. NPC 系统逻辑流程
 
 ### 10.1 来访者 NPC
 
@@ -1458,7 +1557,7 @@ resolveEthicalDilemma(G, choiceIndex)
 
 ---
 
-## 11. 存档系统逻辑流程
+## 15. 存档系统逻辑流程
 
 ### 11.1 自动保存
 
@@ -1526,7 +1625,7 @@ PsyMainScreenPanel.loadGame(saveId)
 
 ---
 
-## 12. 属性计算完整管线
+## 16. 属性计算完整管线
 
 ### 12.1 computePsychologistBase 6 步详解
 
@@ -1596,7 +1695,7 @@ PsychologistBaseRuntime.computePsychologistBase(G, fc)
 
 ---
 
-## 13. 知识基底注入流程
+## 17. 知识基底注入流程
 
 ```
 PsyDoctorWorldBook.selectEntries(scanText, options)
@@ -1635,7 +1734,7 @@ PsyDoctorWorldBook.selectEntries(scanText, options)
 
 ---
 
-## 14. API 桥接调用流程
+## 18. API 桥接调用流程
 
 ```
 PsyDoctorStoryGenerate.sendTurn(userText, G, fc)
@@ -1683,7 +1782,7 @@ PsyDoctorStoryGenerate.sendTurn(userText, G, fc)
 
 ---
 
-## 15. 错误处理与容错机制
+## 19. 错误处理与容错机制
 
 ### 15.1 AI 调用错误
 
@@ -1762,7 +1861,7 @@ ensureGameRuntimeDefaults(G)
 
 ---
 
-## 16. 全局状态转换图
+## 20. 全局状态转换图
 
 ```
                          ┌─────────────┐
@@ -1877,7 +1976,7 @@ ensureGameRuntimeDefaults(G)
 
 ---
 
-## 17. 调试日志系统
+## 21. 调试日志系统
 
 psydoctor 复用 mortal_journey 的 `logPanel.js`，日志分类如下：
 

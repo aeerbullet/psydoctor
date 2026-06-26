@@ -10,11 +10,13 @@ psydoctor 是一个**纯前端浏览器端 AI 文字心理医生成长 RPG**，�
 
 - **双页面路由**：`index.html`（启动页/人生选择）→ `main.html`（主游戏界面）
 - **IIFE + 全局命名空间**模块化：每个 JS 文件是一个自执行函数，通过 `window.XYZ = {}` 暴露 API
-- **AI 驱动叙事**：OpenAI 兼容 API，双回合管线（叙事 AI → 状态 AI），继承 mortal_journey 的 `silly_tarven/bridge.js`
+- **AI 驱动叙事**：OpenAI 兼容 API，多角色 AI 管线（世界 AI → 角色 AI(s) → 状态 AI），继承 mortal_journey 的 `silly_tarven/bridge.js`（详见 §5）
+- **前缀缓存优化**：消息结构设计确保 DeepSeek 硬盘缓存命中，预期输入成本降低 35-50%（详见 §5.6）
 - **XML 标签协议**：AI 通过 `<psy_*>` 标签向游戏引擎传递结构化指令（17 种标签类型）
 - **单一状态树**：`window.PsyDoctorGame` 作为全局游戏状态
 - **双层持久化**：sessionStorage（当前会话快照）+ localStorage（永久存档）
 - **咨询个案引擎**：替代战斗系统，回合制咨询会话 + 治疗效果评估
+- **治疗失误追踪系统**：玩家决策驱动的三级失误（技术/策略/伦理）+ 多层后果（来访者脱落/声誉下降/执照危机）。详见 §12
 - **反移情系统**：心理咨询特有的职业风险追踪机制
 - **伦理困境系统**：多选择伦理决策，无"完美答案"
 
@@ -92,7 +94,13 @@ psydoctor 是一个**纯前端浏览器端 AI 文字心理医生成长 RPG**，�
 | `PsyDoctorWorldGenerate` | `js/ai_server/world_generate.js` | 开局人生剧情 AI 生成 | `MortalJourneyWorldGenerate` |
 | `PsyDoctorInitStateGenerate` | `js/ai_server/init_state_generate.js` | 开局配置 AI（教育/初始理论/初始来访者） | `MortalJourneyInitStateGenerate` |
 | `PsyDoctorStateGenerate` | `js/ai_server/state_generate.js` | 状态 AI（来访者/职业生涯/时数同步） | `MortalJourneyStateGenerate` |
-| `PsyDoctorStoryGenerate` | `js/ai_server/story_generate.js` | 人生叙事 AI 生成 | `MortalJourneyStoryChat` |
+| `PsyDoctorStoryGenerate` | `js/ai_server/story_generate.js` | ~~人生叙事 AI 生成~~（废弃，由 WorldAI + RoleAI 替代） | `MortalJourneyStoryChat` |
+| `PsyDoctorWorldAI` | `js/ai_server/world_ai.js` | 世界 AI — 环境叙事 + 发言顺序表编排 | 新系统 |
+| `PsyDoctorRoleAI` | `js/ai_server/role_ai.js` | 角色 AI — 独立角色发言生成 + 串行调用编排 | 新系统 |
+| `RoleSpeechProfile` | `js/data/role_speech_profile.js` | 角色发言人格模板（来访者/督导师/同行） | 新系统 |
+| `TreatmentErrorTracker` | `js/game/treatment_error_tracker.js` | 治疗失误追踪引擎（三级失误检测） | 新系统 |
+| `PsyDoctorReputation` | `js/game/reputation_system.js` | 三维声誉计算引擎 | 新系统 |
+| `LicenseCrisisEngine` | `js/game/license_crisis.js` | 执照危机状态机 | 新系统 |
 | `PsyMainScreenPanel` | `js/ui/mainScreen_panel.js` | 主界面面板数据逻辑（等级/理论/来访者/存档） | `MjMainScreenPanelRealm` |
 | `PsyMainScreenPanelUi` | `js/ui/mainScreen_panel_ui.js` | 主界面面板 UI 渲染（格子/弹窗/左栏） | `MjMainScreenPanel` |
 | `PsyMainScreenChat` | `js/ui/mainScreen_chat.js` | 聊天 UI + AI 回合编排 + 个案触发 | `MjMainScreenChat` |
@@ -271,173 +279,206 @@ init()
 
 ## 5. AI 管线架构
 
-### 5.1 总体设计：双回合管线
+> **v2.0 更新**（2026-06-26）：原双回合管线（叙事 AI → 状态 AI）已升级为多角色 AI 管线。详见 architecture.md §5。
 
-继承 mortal_journey 的双回合分离设计，每次玩家输入触发两轮 AI 调用：
+### 5.1 总体设计：多角色 AI 管线
+
+每次玩家输入触发 **2+N 次** AI 调用（N = 发言角色数，通常 0~3）：
 
 ```
-玩家输入（如"给来访者张某做一节咨询" / "去参加CBT培训" / "找督导讨论个案"）
+玩家输入
     │
     ▼
-┌──────────────────┐     ┌──────────────────────────┐
-│  叙事 AI          │ ──→ │  状态 AI                  │
-│  (Story AI)      │     │  (State AI)              │
-│                  │     │                          │
-│ 生成人生叙事正文   │     │ 解析标签更新              │
-│ + 来访者话语      │     │ 临床时数/督导时数          │
-│ + 咨询师内心活动   │     │ 来访者档案状态            │
-│ + 督导反馈        │     │ 理论学习进度              │
-│ + 行动建议        │     │ 周围人物列表              │
-│ + 个案触发        │     │ 反移情状态变化            │
-│ + 伦理困境触发    │     │ 职业生涯事件              │
-│ + 理论洞见        │     │ 咨询室物品/工具           │
-└──────────────────┘     └──────────┬───────────────┘
-                                    │
-                            ┌───────▼───────────┐
-                            │  应用状态更新       │
-                            │  刷新 UI 面板       │
-                            │  检查个案触发       │
-                            │  检查伦理困境       │
-                            └───────────────────┘
+┌──────────────────────────────────────────────────────┐
+│                                                       │
+│  ╔══════════════════════════════════════════════════╗  │
+│  ║  Phase 1: 世界 AI（World AI）— 1 次调用          ║  │
+│  ║  职责：环境叙事 + 氛围描写 + 发言顺序表编排       ║  │
+│  ║  输出：流式叙事正文 + <psy_scene_info> 标签       ║  │
+│  ║        speechSchedule 决定本回合谁说话            ║  │
+│  ╚══════════════════════════╦═══════════════════════╝  │
+│                             │                          │
+│                             ▼                          │
+│  ╔══════════════════════════════════════════════════╗  │
+│  ║  Phase 2: 角色发言阶段 — N 次独立调用（N ≥ 0）  ║  │
+│  ║                                                  ║  │
+│  ║  按 speechSchedule 顺序串行调用：                ║  │
+│  ║  ┌→ 角色 AI-1（固定 system prompt, 专属缓存）    ║  │
+│  ║  │→ 角色 AI-2（收到前一个角色的发言, 对话感）    ║  │
+│  ║  │→ ...                                          ║  │
+│  ║  └→ 每个角色独立人格，独立 prefix cache          ║  │
+│  ╚══════════════════════════════╦═══════════════════╝  │
+│                                 │                      │
+│                                 ▼                      │
+│  ╔══════════════════════════════════════════════════╗  │
+│  ║  Phase 3: 状态 AI（State AI）— 1 次调用          ║  │
+│  ║  输入：世界 AI 叙事 + 所有角色发言（拼接）        ║  │
+│  ║  输出：结构化标签 → 逐项校验 → 写回 G             ║  │
+│  ╚══════════════════════════════════════════════════╝  │
+│                                                       │
+└──────────────────────────────────────────────────────┘
 ```
 
-**分离原因**（继承自 mortal_journey 的设计智慧 + psydoctor 特殊需求）：
-- 叙事 AI 聚焦叙事质量与人文温度，prompt 偏向文学性/共情性/心理学专业性
-- 状态 AI 聚焦结构化数据提取，prompt 偏规则/约束/数值化
-- 分离后各自 prompt 更短、指令更聚焦，降低模型混淆
-- 心理咨询场景中叙事与状态的信息密度差异更大——叙事可能包含大量来访者话语和内心活动，状态需要精确追踪微小的属性变化（时数、理论进度、反移情积累）
-- 状态 AI 的输出可以被程序可靠解析（JSON 标签），叙事 AI 的输出以展示为主
+**分离原因**：
+- **世界 AI** 聚焦场景叙事与氛围，prompt 偏向文学性/心理学世界设定
+- **角色 AI** 各自聚焦独立人格表现，各自的 system prompt 固定（命中 prefix cache）
+- **状态 AI** 聚焦结构化数据提取，prompt 偏规则/约束/数值化
+- 旧「叙事 AI」一人演所有角色的痛点得以解决——来访者、督导师、同行各有独立的 AI 人格
+- 旧「咨询师内心活动」不再需要——咨询师就是玩家
 
-### 5.2 叙事 AI（story_generate.js）
+### 5.2 世界 AI（world_ai.js）
 
-**入口**：`PsyDoctorStoryGenerate.buildMessages()` 构建完整 OpenAI messages 数组
+**入口**：`PsyDoctorWorldAI.buildMessages()` 构建完整 OpenAI messages 数组
 
-**消息拼装流程**：
-
+**消息结构**（缓存友好，固定在前，变化在后）：
 ```
-buildMessages(fc, G, userText, priorStoryRaw)
-  ├── 1  system 消息
-  │     ├── 活跃叙事预设（activePreset.systemPrompt，含模板变量填充）
-  │     ├── 规则预设（N 个 PSY_STORY_RULE_PRESET_IDS 依次拼接）
-  │     └── 知识基底摘录（PsyDoctorWorldBook.selectEntries + formatForSystem）
-  ├── 2  历史对话轮次（从 G.chatHistory 截取最近 N 轮）
-  │     ├── user 消息：用户原文
-  │     └── assistant 消息：上次叙事 AI 原文（含标签）
-  └── 3  当前 user 消息
-        ├── 用户输入正文
-        ├── 运行时状态摘要（等级/8+2 属性/理论掌握/当前来访者/临床时数/哲学深度）
-        ├── 周围人物快照（来访者/督导师/同行）
-        ├── 职业生涯上下文（当前工作场景/近期事件/伦理状态）
-        ├── 反移情状态（若存在累积）
-        └── 个案上下文（若正在进行咨询会话 pendingCaseSession）
+messages:
+  [0] system — 叙事规则 + 世界设定 + 发言编排规则（~3000 tokens，固定）
+  [1..K] 对话历史（只追加，不改写）
+  [K+1] user — 玩家输入 + 游戏状态摘要 + 前文上下文
+
+⚠️ system prompt 中**不含**时间戳、随机数、动态模板变量
 ```
 
-**叙事 AI 输出标签**（嵌入叙事文本中，不影响阅读）：
-
-| 标签 | 含义 | 是否必须 |
-|---|---|---|
-| `<psy_story_body>...</psy_story_body>` | 人生叙事正文（来访者话语+咨询师内心活动+日常叙事） | ✅ 必须 |
-| `<psy_theory_insight>...</psy_theory_insight>` | 理论洞见获得（理论名+阶段提升+内容摘要） | 可选 |
-| `<psy_philosophy_reflection>...</psy_philosophy_reflection>` | 哲学思辨触发（哲学维度+洞见内容） | 可选 |
-| `<psy_action_suggestions>...</psy_action_suggestions>` | 四级行动建议（aggressive/neutral/cautious/veryCautious） | ✅ 必须 |
-| `<psy_case_session_trigger>...</psy_case_session_trigger>` | 咨询个案触发（来访者 ID+个案类型+初始评估） | 可选 |
-| `<psy_ethical_dilemma>...</psy_ethical_dilemma>` | 伦理困境触发（困境类型+场景+选项列表） | 可选 |
-
-### 5.3 状态 AI（state_generate.js）
-
-**入口**：`PsyDoctorStateGenerate.sendTurn()` 发送状态同步请求
-
-**状态 AI 输出标签**（独立于叙事，纯结构化 JSON）：
-
-| 标签 | 内容格式 | 作用 |
-|---|---|---|
-| `<psy_world_state>` | `{"worldTimeString":"...", "currentLocation":"...", "currentWorkplace":"...", "age":N}` | 更新世界时间/地点/工作场景/年龄 |
-| `<psy_therapist_state>` | `{"currentFatigue":N, "burnoutLevel":N, "selfAwarenessChange":N}` | 更新咨询师自身状态（疲劳/倦怠/自觉性变化） |
-| `<psy_client_state>` | `{"clientId":"...", "symptomChange":N, "allianceChange":N, "phaseProgress":N, "defenseStatus":"..."}` | 更新指定来访者的治疗状态 |
-| `<psy_clinical_gain>` | `{"clinicalHours":N, "supervisionHours":N, "theoryProgress":{"theoryName":N}, "insightGained":N}` | 临床成长积累（时数/理论进步/洞察） |
-| `<psy_supervision_notes>` | `{"supervisorFeedback":"...", "blindSpotIdentified":"...", "growthArea":"..."}` | 督导记录（督导师反馈/盲点/成长方向） |
-| `<psy_career_event>` | `{"eventType":"...", "description":"...", "requirements":{...}, "deadline":"..."}` | 职业生涯事件（资格考试/论文截止/会议邀请/转职机会） |
-| `<psy_countertransference>` | `{"type":"...", "change":N, "triggerSource":"...", "riskLevel":"low/medium/high"}` | 反移情状态变化 |
-| `<psy_nearby_people>` | `[{...characterSheet...}]` | 周围人物完整列表替换（来访者/督导师/同行） |
-| `<psy_inventory_ops>` | `[{"op":"add"/"remove", "name":"...", "count":N, "type":"book/tool/assessment"}]` | 藏书/工具/测评工具增删 |
-| `<psy_theory_milestone>` | `{"theoryName":"...", "milestoneType":"stage_advance/integration_ready/innovation_unlocked", "description":"...", "integrationUnlocked":"..."}` | 理论学习里程碑通知（仅作 UI 提示触发，stage 由引擎根据 hours 计算） |
-
-**状态 AI 规则模板**（`state_rules.js`）的核心约束内容：
-
-- **来访者状态更新规则**：症状改善/恶化幅度约束（单回合变化不超过 ±15%）、治疗联盟变动范围、防御强度与咨询师属性的对抗关系
-- **临床时数积累规则**：单次咨询 1-2 小时、督导 0.5 小时、培训/会议获得的是理论学习时数而非临床时数、不同来源不混淆
-- **反移情变化规则**：触发源类型（来访者类型/个人议题共鸣/职业压力）与反移情类型的映射关系
-- **理论进步规则**：不同学习阶段所需小时数（通读 10h → 理解 30h → 练习 60h → 掌握 120h → 整合 240h → 创新 500h）
-- **物品操作规则**：书籍可重复获得（不同版本/译本）、测评工具需培训后才能获得、治疗工具数量上限
-
-### 5.4 新档门闩：4 阶段 Bootstrap Gate
-
-新档首次进入主界面时，通过全屏门闩 UI 依次执行 4 个阶段：
-
+**输出**：
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Phase 1: openingStory（开局人生剧情 AI）                 │
-│  world_generate.js → runOpeningStoryStrictPromise()      │
-│                                                          │
-│  输入：fateChoice（教育背景/动机/初始理论/特质）            │
-│  输出：第一段人生叙事正文（入学/实习第一天/初入职场）       │
-│  存入：G.chatHistory[0]                                  │
-│  标签：<psy_story_body>                                   │
-├─────────────────────────────────────────────────────────┤
-│  Phase 2: initState（开局配置 AI）                        │
-│  init_state_generate.js → runInitStateAiIfNeeded()       │
-│                                                          │
-│  输入：开局叙事正文 + fateChoice                          │
-│  输出：初始配置三件套                                     │
-│    ① <psy_init_loadout> — 初始藏书/工具的详细属性        │
-│       {                                                  │
-│         books: [{name, author, theory, effect}],         │
-│         tools: [{name, type, usage}],                    │
-│         initialClient: {profile, chiefComplaint, ...}    │
-│       }                                                  │
-│    ② <psy_world_state> — 初始时间/地点/工作场景          │
-│    ③ <psy_therapist_state> — 初始 8+2 属性值覆写          │
-│       （AI 可根据叙事微调，不超过基值 ±5）                │
-│                                                          │
-│  开局物品生成约束（init_state_rules.js）：                 │
-│  - 心理学本科→至少获得「《普通心理学》」+"《成为一个人》"   │
-│  - 精神科医生→获得 MMPI-2 + SCL-90 测评工具               │
-│  - 哲学学者→获得哲学著作 + 哲学思辨初值+3                  │
-│  - 初始来访者难度不超过玩家等级                             │
-├─────────────────────────────────────────────────────────┤
-│  Phase 3: stateSync（状态同步 AI）                        │
-│  mainScreen_chat.js → runStateInventoryAiTurn()          │
-│                                                          │
-│  根据开局剧情同步完整职业生涯状态：                         │
-│  - 治疗联盟初始值：50（基准）                              │
-│  - 反移情状态：全类型初始化为 0                            │
-│  - 临床时数：根据教育背景初始化（心理学徒 0/实习 300-500）  │
-│  - 周围人物：同学/同事/导师/初始来访者                     │
-│  - 行动建议：适合当前阶段的选择                            │
-│  标签：<psy_nearby_people> + 全部状态标签                  │
-├─────────────────────────────────────────────────────────┤
-│  Phase 4: 完成                                            │
-│  finishBootstrapGateSuccess()                            │
-│  隐藏门闩 UI、计算初始属性、渲染所有面板、持久化快照       │
-└─────────────────────────────────────────────────────────┘
+玩家可见（流式）：
+  环境描写 + 氛围渲染 + 场景推进叙事正文
+
+程序消费：
+  <psy_scene_info>
+  {
+    "sceneType": "therapy_session",
+    "speechSchedule": [
+      { "id": "client_001", "role": "client", "turn": 1 },
+      { "id": "client_001", "role": "client", "turn": 2 },
+      { "id": "supv_001",  "role": "supervisor", "turn": 3 }
+    ],
+    "actionSuggestions": { "aggressive": "...", "neutral": "...", ... }
+  }
+  </psy_scene_info>
 ```
 
-每个阶段：
-- 独立计时（显示开始/结束时间戳）
-- 有状态指示器（等待中/执行中/成功/失败）
-- 支持错误展示与完整重试（失败后点击「重试」重新执行完整管线）
+speechSchedule 决定了角色发言阶段调用哪些角色 AI、按什么顺序。
 
-### 5.5 开局配置 AI（init_state_generate.js）
+### 5.3 角色 AI（role_ai.js）
 
-位于剧情 AI 与常态状态 AI 之间，职责单一：
+每个角色一次独立 API 调用，串行执行，后一个角色收到前一个的发言原文。
 
-- **输入**：开局叙事正文 + 命运抉择（教育背景/动机/初始理论/特质）
-- **输出**：三对标签
-  1. `<psy_init_loadout>` — 初始藏书列表、测评工具、初始来访者简介
-  2. `<psy_world_state>` — 世界时间/地点/工作场景/年龄
-  3. `<psy_therapist_state>` — 初始 8+2 属性覆写值
-- **离线数据补全**：开局 AI 输出框架后，前端从 `DoctorLevelState` 和 `TheoryState` 补全详细属性数值
-- **简化字段**：开局阶段物品以名称/作者/简介为主，不强制完整属性数值（后续由 `PsychologistBaseRuntime` 计算）
+**消息结构**（每个角色 system prompt 固定 → 独立命中 prefix cache）：
+```
+messages:
+  [0] system — 角色人格描述（~800 tokens，固定，由 speechProfile 构建）
+      来访者：姓名 + 案例类型 + 依恋模式 + 防御风格 + 说话习惯
+      督导师：姓名 + 理论取向 + 教学风格
+      同行：姓名 + 关系类型 + 个性特征
+  [1] user — 场景上下文 + 前文摘要 + [前一发言者原文]
+
+⚠️ 同一角色每次调用的 system prompt 完全相同 → 始终命中专属缓存
+⚠️ 相同 (caseType, attachment, defense) 组合的角色共享相同 system prompt → 共享缓存
+```
+
+**调用编排**（role_ai.js 中的串行循环）：
+```
+for each turn in speechSchedule:
+  result = await callRoleAI(roleProfiles[turn.id], {
+    sceneContext: worldAiNarrative,
+    previousSpeech: previousTurn?.output,  // 串行：后一个角色知道前一个说了什么
+  })
+  appendToChat(result.text)
+  previousTurn = { id: turn.id, output: result.text }
+```
+
+### 5.4 状态 AI（state_generate.js）
+
+保持与旧架构基本一致，输入来源变化：
+
+```
+旧：叙事 AI 的完整输出
+新：世界 AI 叙事正文 + 所有角色 AI 的发言正文（按 speechSchedule 顺序拼接）
+```
+
+**核心逻辑不变**：XML 标签提取 → JSON 解析 → 逐项校验 → 写回 G。
+
+**新增标签**（配合惩罚机制）：
+
+| 标签 | 用途 |
+|------|------|
+| `<psy_scene_info>` | 解析 sceneType + speechSchedule |
+| `<psy_treatment_error>` | 评估治疗失误 |
+| `<psy_reputation_event>` | 声誉变化事件 |
+| `<psy_speech_habits_update>` | 更新角色说话习惯 |
+
+### 5.5 角色数据模型（speechProfile）
+
+每个可发言 NPC（`nearbyPeople` + `currentClients`）新增 `speechProfile` 字段：
+
+```javascript
+speechProfile: {
+  roleType: "client" | "supervisor" | "colleague",
+  personalityParams: {
+    // 来访者专属
+    caseType: "existential_crisis",
+    attachmentStyle: "secure",
+    defenseStyle: "intellectualization",
+    // 督导师专属
+    theoryOrientation: "classical_psychoanalysis",
+    teachingStyle: "strict_profound",
+  },
+  // 演化字段（状态 AI 更新）
+  speechHabits: "倾向于用哲学性语言，说话时经常停顿",
+  attitudeToPlayer: "信任但有微妙的距离感",
+}
+```
+
+### 5.6 前缀缓存设计约束
+
+所有 AI 调用的消息结构必须遵循**固定前置、变化后置**原则，确保 DeepSeek 硬盘缓存命中。核心机制：系统自动检测请求前缀与历史请求的重合部分，重合部分从缓存读取（价格降至 1/10）。
+
+**缓存三层策略**：
+
+| 层 | 原理 | 实现 |
+|----|------|------|
+| 请求前缀缓存 | DeepSeek 自动匹配相同前缀，读取 NVMe 硬盘缓存 | 无需代码 |
+| 消息结构缓存 | 每个 AI 的固定内容放在 system prompt 位置 | messages[0] = system |
+| 内容模板缓存 | 相同参数的角色共享 system prompt | buildRoleSystemPrompt 确定序列化 |
+
+**黄金规则**：
+```
+固定部分（参与缓存）：
+  messages[0]: { role: "system", content: "固定的 system prompt" }
+变化部分（不参与缓存）：
+  messages[1..N-1]: 对话历史（只追加，不改写）
+  messages[N]: { role: "user", content: "本次用户消息" }
+```
+
+**各 AI 的消息结构**：
+
+| AI | System Prompt（固定） | User Message（变化） | 缓存命中率（稳态） |
+|----|----------------------|---------------------|-------------------|
+| 世界 AI | 叙事规则 + 发言编排规则（~3000 tokens） | 玩家输入 + 游戏状态 + 前文 | 50-65% |
+| 角色 AI | 该角色人格描述（~800 tokens） | 场景 + 前文 + 前一发言 | 40-50%（同角色 100%） |
+| 状态 AI | 状态规则模板（~2000 tokens） | 完整叙事 + 游戏快照 | 45-55% |
+
+**绝对禁忌**：
+- system prompt 中插入 `{{worldTimeString}}`、`Math.random()`、trace ID
+- 改写已有的对话历史消息
+- 非确定序列化的 JSON（`JSON.stringify` 不传 `sort_keys`）
+- 同一角色的不同调用使用不同的 system prompt
+
+**角色 AI 缓存优化**：
+- 同角色每次调用的 system prompt 完全固定 → 始终命中专属缓存
+- 相同 `(caseType, attachmentStyle, defenseStyle)` 组合 → 完全相同 prompt → 共享缓存
+- 同角色同回合第二次发言（speechSchedule 同一 id 出现 2 次）→ 延迟明显低于第一次
+
+**监控**：在 `bridge.js` 中记录每次调用的 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`，日志频道 `[psy:cache]`。
+
+**预期效果**：稳态下输入成本降低 35-50%，角色 AI system prompt 命中率 100%。
+
+### 5.7 新档门闩：4 阶段 Bootstrap Gate
+
+（保持与旧架构一致的结构，Phase 1 开局剧情 AI 保持不变，使用 `world_generate.js`）
+（Phase 2/3 与旧架构一致，后续可迁移到世界 AI + 角色 AI 管线）
 
 ---
 
@@ -1242,10 +1283,95 @@ var ETHICAL_DILEMMA_TYPES = {
 - 无时间限制（与真实伦理决策一样，允许深思熟虑）
 - 选择后无法撤销（但后果可由后续叙事/督导部分修复）
 - 积累的伦理决策记录影响「大师」和「心灵哲学家」突破判定
+- Tier 3 伦理性失误（边界侵犯/保密违规/能力越界等）可触发伦理调查，联动声誉和执照系统（见 §12.1）
 
 ---
 
-## 12. 世界书系统（心理学知识基底）
+## 12. 游戏性惩罚系统架构
+
+> 心理医生的"失败"不是被怪物打死，而是在临床工作中犯错。以下系统将治疗失误转化为有深度的游戏叙事。
+
+### 12.1 治疗失误追踪引擎
+
+三级失误体系，由引擎规则和 AI 标签联合判定：
+
+| 层级 | 类型 | 判定方式 | 频率 | 后果 |
+|------|------|---------|------|------|
+| 🟡 Tier 1 | 技术性失误 | 引擎规则：防御-技术适配矩阵 + 联盟安全线 + 连续使用检测 | 高频 | 联盟波动、脱落风险微增 |
+| 🟠 Tier 2 | 策略性失误 | 跨回合模式检测：阻抗信号忽视、疗程停滞、过度主导 | 中频 | 脱落风险显著升高、需督导 |
+| 🔴 Tier 3 | 伦理性失误 | AI 标签 `<psy_treatment_error>` + 伦理红线规则 | 低频 | 声誉大幅下降、投诉、执照危机 |
+
+**核心数据结构**（`G.treatmentErrorTracker`）：`currentSessionErrors[]` / `errorHistory[]` / `activeWarnings[]` / `consecutiveErrors` / `errorStats` / `currentRiskScore [0-100]`
+
+**防御-技术适配矩阵**：10 种来访者防御 × 6 种干预技术 = 60 格适配评分（optimal / neutral / risky / dangerous）。在个案回合中，引擎根据当前来访者防御和玩家选择的干预技术查表，判定是否存在 Tier 1 失误。
+
+### 12.2 来访者脱落系统
+
+```
+脱落风险 = 基础脱离倾向（依恋模式 + 案例难度） + 失误惩罚 - 联盟缓冲
+
+基础脱离倾向：
+  secure → 10%, anxious → 25%, avoidant → 35%, disorganized → 40%
+  每 10 点案例难度 +2%
+
+失误惩罚：
+  Tier 1 失误 → +5~15%, Tier 2 失误 → +20~30%, Tier 3 失误 → +40~60%
+
+联盟缓冲：
+  alliance ≥ 70 → -20%, alliance < 30 → +15%
+```
+
+**四级预警**：🟢 绿灯(<30%) → 🟡 黄灯(30-60%，来访者出现不满信号) → 🟠 橙灯(60-80%，来访者表达脱落意向) → 🔴 红灯(>80%，最后通牒，下回合处理不当则脱落确认)。
+
+**脱落后果**：临床时数损失 + 声誉 -5~15 + 反移情累积触发 + AI 叙事中的"失去与反思"故事线。
+
+### 12.3 三维声誉系统
+
+| 维度 | 范围 | 来源 | 影响 |
+|------|------|------|------|
+| 专业声誉 | [0-1000] | 成功结案 +3~5，投诉 -20~50，伦理争议 -15~30 | 来访者质量、转介数量 |
+| 行业地位 | [0-100] | 学术贡献、协会参与、流派影响力 | 晋升资格、教学资格 |
+| 人脉网络 | [0-100] | 同行/督导师关系深度 | 危机缓冲、转介多样性 |
+
+**来访者投诉机制**：伦理失误→60%概率投诉，脱落+alliance<20→25%概率。累计 3+ 投诉触发伦理委员会调查（多回合审查流程：无过失/轻微过失/中度过失/严重过失）。
+
+### 12.4 执照危机系统
+
+五态状态机：
+
+```
+ACTIVE ──(3+投诉 / 严重伦理失误)──→ UNDER_REVIEW ──(中度过失)──→ SUSPENDED
+  ↑                                      │                        │
+  │                                      │(无过失)                 │(期满+条件)
+  │                                      ↓                        ↓
+  └────────────────────────────────  RESTRICTED ←─────────────────┘
+                                         │
+                                         │(通过评估)
+                                         ↓
+                                      ACTIVE
+
+严重过失 → REVOKED → "重建人生"叙事分支
+```
+
+**各状态限制**：UNDER_REVIEW（不可接新来访者）、SUSPENDED（停止临床工作，只能督导+个人体验）、RESTRICTED（只能接低风险来访者，max 3 人）、REVOKED（进入替代职业路径：研究者/教师/作者）。
+
+**执照危机叙事弧**：跌落（The Fall）→ 面对（The Reckoning，伦理听证会）→ 重建（The Rebuilding，重新执业或新人生）。
+
+### 12.5 风险仪表盘
+
+左栏底部新增模块，实时可视化：
+
+- 执业安全度（进度条 + 百分比）
+- 风险评分（圆形仪表盘，🟢0-25 / 🟡26-50 / 🟠51-75 / 🔴76-100，>75 全屏警告+红色闪烁）
+- 活跃警告列表（最多 5 条）
+- 声誉三维概览（迷你进度条）
+- 来访者统计（当前/脱落/结案 + 脱落率）
+
+**回合级反馈**：个案回合后的效果弹窗（来访者回应 + 效果评估 + 失误警告 + 脱落风险变化）+ 干预选择前的风险预估。
+
+---
+
+## 13. 世界书系统（心理学知识基底）
 
 ### 12.1 设计目的
 
@@ -1310,7 +1436,7 @@ selectEntries(scanText, options)
 
 ---
 
-## 13. AI 预设系统
+## 14. AI 预设系统
 
 ### 13.1 双层预设结构
 
@@ -1368,7 +1494,7 @@ N 个规则预设独立于叙事预设，始终拼接在 system prompt 尾部：
 
 ---
 
-## 14. API 桥接层
+## 15. API 桥接层
 
 ### 14.1 复用策略
 
@@ -1412,7 +1538,7 @@ psydoctor 中 API 调用的几种场景：
 
 ---
 
-## 15. UI 渲染架构
+## 16. UI 渲染架构
 
 ### 15.1 面板分层
 
@@ -1475,7 +1601,7 @@ mainScreen_panel_ui.js（UI 渲染层）
 
 ---
 
-## 16. 职业生涯发展与突破系统
+## 17. 职业生涯发展与突破系统
 
 ### 16.1 临床时数积累
 
@@ -1561,7 +1687,7 @@ mainScreen_panel_ui.js（UI 渲染层）
 
 ---
 
-## 17. 持久化架构
+## 18. 持久化架构
 
 ### 17.1 双层存储 + 自动保存
 
@@ -1623,7 +1749,7 @@ loadGame(saveId)
 
 ---
 
-## 18. 调试日志系统
+## 19. 调试日志系统
 
 ### 18.1 复用策略
 
@@ -1642,7 +1768,7 @@ psydoctor 中的日志分类：
 
 ---
 
-## 19. 关键设计决策与权衡
+## 20. 关键设计决策与权衡
 
 ### 19.1 完全复用 bridge.js（零修改）
 
@@ -1729,7 +1855,7 @@ psydoctor 中的日志分类：
 
 ---
 
-## 20. 数据流全景图
+## 21. 数据流全景图
 
 ```
                      ┌──────────────────────┐
@@ -1784,7 +1910,7 @@ psydoctor 中的日志分类：
 
 ---
 
-## 21. 模块依赖矩阵
+## 22. 模块依赖矩阵
 
 ```
                       数据层                    引擎层                        AI层                    UI层
@@ -1817,7 +1943,7 @@ mainScreen              ✓     -    -    ✓    -    -      -     ✓    ✓   
 
 ---
 
-## 22. 与 mortal_journey 架构的继承与差异汇总
+## 23. 与 mortal_journey 架构的继承与差异汇总
 
 | 架构维度 | mortal_journey | psydoctor | 继承/重写 |
 |---------|---------------|-----------|----------|
@@ -1843,7 +1969,7 @@ mainScreen              ✓     -    -    ✓    -    -      -     ✓    ✓   
 
 ---
 
-## 23. 实现优先级与依赖关系
+## 24. 实现优先级与依赖关系
 
 ### 第一阶段：核心骨架（可玩原型）
 ```

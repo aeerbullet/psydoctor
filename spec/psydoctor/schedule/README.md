@@ -1,135 +1,129 @@
-# psydoctor 开发 Schedule 总览
+# psydoctor 开发 Schedule 总览（v2.0）
 
-> 4 阶段渐进式开发计划。每个阶段独立可验证，完成后将对应文件重命名为 `phase-{N}-{name}-done.md`。
+> v2.0 更新（2026-06-26）：AI 管线从双回合架构重构为多角色 AI 架构。排期表据此重新编排。
+>
+> 旧 Phase 2/3/3B 合并重组为新的 Phase 2（多角色 AI 管线）和 Phase 3（游戏性系统）。
 
 ---
 
 ## 阶段总览
 
-| 阶段 | 文件 | 目标 | 预估模块数 |
+| 阶段 | 文件 | 目标 | 新建/改造文件数 |
 |------|------|------|-----------|
-| Phase 1 | [phase-1-core.md](phase-1-core.md) | 核心框架（可玩原型） | 14 个 JS 模块 + 2 HTML + 4 CSS |
-| Phase 2 | [phase-2-depth.md](phase-2-depth.md) | 心理学深度系统 | 8 个新/改模块 + 数据扩充 |
-| Phase 3 | [phase-3-advanced.md](phase-3-advanced.md) | 高级机制 | 7 个新/改模块 |
-| Phase 4 | [phase-4-polish.md](phase-4-polish.md) | 打磨完善 | 全模块优化 + 测试 |
+| Phase 1 | [phase-1-core.md](phase-1-core.md) | 核心框架（可玩原型）✅ | 已完成（233/271） |
+| Phase 2 | [phase-2-ai-pipeline.md](phase-2-ai-pipeline.md) | 多角色 AI 管线 + 发言系统 | 5 新建 + 7 改造 + 1 废弃 |
+| Phase 3 | [phase-3-gameplay.md](phase-3-gameplay.md) | 惩罚机制 + 声誉 + 执照 + 风险仪表盘 | 5 新建 + 8 改造 |
+| Phase 4 | [phase-4-polish.md](phase-4-polish.md) | 打磨完善 + 前缀缓存调优 | 全模块 |
 
 ---
 
 ## 阶段依赖关系
 
 ```
-Phase 1 ──── 可玩原型 ──── 角色创建 + AI 对话 + 面板 + 存档
+Phase 1 ──── 可玩原型 ✅
+  │         角色创建 + AI 对话 + 面板 + 存档 + 个案引擎
   │
-  ├── Phase 2 ──── 个案引擎 + 理论体系 + 来访者 + 反移情
+  ├── Phase 2 ──── 多角色 AI 管线（NEW）
+  │     │         世界 AI + 角色 AI（串行发言）+ speechProfile
+  │     │         前缀缓存友好消息结构
+  │     │         个案引擎整合新管线
   │     │
-  │     ├── Phase 3 ──── 伦理困境 + 理论整合 + 职业事件 + 个人体验 + 传承
+  │     ├── Phase 3 ──── 游戏性系统（NEW）
+  │     │     │         治疗失误 + 来访者脱落 + 三维声誉
+  │     │     │         执照危机 + 风险仪表盘
   │     │     │
-  │     │     └── Phase 4 ──── 移动端 + 扩展 + 调优 + 测试
+  │     │     └── Phase 4 ──── 打磨完善
+  │     │                   移动端 + 调优 + 测试
   │     │
-  │     └── (Phase 2 完成即可进行深度游戏体验)
+  │     └── (Phase 2 完成 = 多角色独立发言可用)
   │
-  └── (Phase 1 完成即可进行基础游戏体验)
+  └── (Phase 1 完成 = 基础游戏可玩)
+```
+
+**Phase 2 是本次重构的核心**：将旧的双回合管线（叙事 AI 一人演所有角色）替换为多角色 AI 管线（世界 AI + N 个角色 AI）。Phase 3 的惩罚系统依赖 Phase 2 的新管线才能实现独立角色人格和发言链。
+
+---
+
+## 各阶段文件变更明细
+
+### Phase 1 已完成文件
+
+Phase 1 已基本完成（233/271 ✅），产出文件均在 `js/` 目录下正常运作。剩余 38 项为验证任务和边缘情况处理，在 Phase 4 中统一补完。
+
+### Phase 2 文件变更（多角色 AI 管线 — 12 个文件）
+
+```
+新建（5 个）：
+  js/ai_server/world_ai.js              — 世界 AI：环境叙事 + speechSchedule 编排
+  js/ai_server/role_ai.js               — 角色 AI：独立角色发言 + 串行调用编排
+  js/data/role_speech_profile.js        — 发言人格模板（来访者/督导师/同行）
+  js/data/theory_state.js               — 理论学习体系数据（旧 Phase 2 遗留）
+  js/game/personal_therapy.js           — 个人体验系统（旧 Phase 3 遗留）
+
+改造（7 个）：
+  js/ui/mainScreen_chat.js              — 新管线编排：world → role(s) → state
+  js/worldbook/preset_content.js        — 规则拆分到世界 AI 和角色 AI
+  js/worldbook/preset.js                — 新增角色 AI 预设管理
+  js/data/client_templates.js           — 新增 speechProfile 初始化数据
+  js/game/client_character_sheet.js     — 新增 speechProfile 字段构建
+  js/game/case_session.js               — 整合失误检测基础 + 防御-技术适配表
+  js/ai_server/state_generate.js        — 新增 psy_scene_info 等标签解析
+
+废弃（1 个）：
+  js/ai_server/story_generate.js        — 被世界 AI + 角色 AI 替代
+```
+
+### Phase 3 文件变更（游戏性系统 — 13 个文件）
+
+```
+新建（5 个）：
+  js/game/treatment_error_tracker.js    — 三级失误追踪引擎
+  js/game/reputation_system.js          — 三维声誉计算引擎
+  js/game/license_crisis.js             — 执照危机状态机
+  js/data/license_state.js              — 执照状态数据表
+  js/data/dropout_table.js              — 脱落基础倾向数据表
+
+改造（8 个）：
+  js/game/countertransference.js        — 失误→反移情联动
+  js/game/ethics_dilemma.js             — Tier 3 伦理性失误 + 声誉影响
+  js/game/psychologist_base_runtime.js  — Step 3.5 声誉/执照修正
+  js/ui/mainScreen_panel.js             — 失误追踪/声誉/执照数据管理
+  js/ui/mainScreen_panel_ui.js          — 风险仪表盘 + 脱落预警 + 回合弹窗
+  js/ui/mainScreen_chat.js              — 后处理整合失误/脱落/声誉检查
+  js/worldbook/state_rules.js           — 失误/脱落/声誉规则模板
+  js/ai_server/state_generate.js        — 新增 psy_treatment_error 等标签
+```
+
+### Phase 4 文件变更（打磨 — 全模块）
+
+```
+psydoctor/
+├── css/
+│   ├── main.css                        (移动端适配)
+│   └── creation.css                    (移动端适配)
+├── js/
+│   ├── worldbook/world_book_entries.js (扩充 25+→50+)
+│   ├── worldbook/preset_content.js     (调优)
+│   ├── worldbook/state_rules.js        (调优)
+│   ├── ai_server/*                     (前缀缓存验证 + 模型适配)
+│   └── ui/*                            (性能优化 + 边缘情况)
+├── silly_tarven/bridge.js              (缓存命中率监控)
+└── spec/psydoctor/                     (文档归档)
 ```
 
 ---
 
-## 核心文件产出清单
+## 旧排期与新排期的映射关系
 
-### Phase 1 新建文件（20 个）
-
-```
-psydoctor/
-├── index.html
-├── main.html
-├── css/
-│   ├── start_frame.css
-│   ├── creation.css
-│   ├── main.css
-│   └── logPanel.css                         (复制)
-├── silly_tarven/
-│   └── bridge.js                            (复制)
-└── js/
-    ├── character/
-    │   └── character_attribute.js           (新建)
-    ├── data/
-    │   ├── doctor_level.js                  (新建)
-    │   ├── philosophy_state.js              (新建)
-    │   ├── creation_config.js               (新建)
-    │   └── trait_samples.js                 (新建)
-    ├── game/
-    │   └── psychologist_base_runtime.js     (新建)
-    ├── ai_server/
-    │   ├── world_generate.js                (新建)
-    │   ├── init_state_generate.js           (新建)
-    │   ├── story_generate.js                (新建)
-    │   └── state_generate.js                (新建)
-    ├── worldbook/
-    │   ├── world_book_entries.js            (新建)
-    │   ├── world_book.js                    (新建)
-    │   ├── preset_content.js                (新建)
-    │   ├── preset.js                        (新建)
-    │   ├── state_rules.js                   (新建)
-    │   └── init_state_rules.js              (新建)
-    ├── ui/
-    │   ├── fateChoiceController.js          (新建)
-    │   ├── mainScreen.js                    (新建)
-    │   ├── mainScreen_chat.js               (新建)
-    │   ├── mainScreen_panel.js              (新建)
-    │   └── mainScreen_panel_ui.js           (新建)
-    └── log/
-        └── logPanel.js                      (复制)
-```
-
-### Phase 2 新建/修改文件（8 个）
-
-```
-psydoctor/js/
-├── data/
-│   ├── theory_state.js                      (新建)
-│   └── client_templates.js                  (新建)
-├── game/
-│   ├── client_character_sheet.js            (新建)
-│   ├── case_session.js                      (新建)
-│   └── countertransference.js               (新建)
-├── worldbook/
-│   ├── world_book_entries.js                (扩充 10→25+)
-│   └── preset_content.js                    (扩充 3→7+ 规则预设)
-├── ai_server/
-│   ├── world_generate.js                    (完善 6 种教育背景)
-│   └── init_state_generate.js               (完善配置模板)
-└── ui/
-    └── mainScreen_panel_ui.js               (新增个案/反移情 UI)
-```
-
-### Phase 3 新建/修改文件（7 个）
-
-```
-psydoctor/js/
-├── game/
-│   ├── ethics_dilemma.js                    (新建)
-│   ├── personal_therapy.js                  (新建)
-│   └── psychologist_base_runtime.js         (新增整合/职业事件功能)
-├── ui/
-│   └── mainScreen_panel_ui.js               (新增伦理/整合/职业/个人体验 UI)
-└── js/ui/
-    └── mainScreen_chat.js                   (集成伦理困境触发)
-```
-
-### Phase 4 修改文件（全模块）
-
-```
-psydoctor/
-├── css/
-│   ├── main.css                             (移动端适配)
-│   └── creation.css                         (移动端适配)
-├── js/
-│   ├── worldbook/world_book_entries.js      (扩充 25+→50+)
-│   ├── worldbook/preset_content.js          (调优)
-│   ├── worldbook/preset.js                  (调优)
-│   ├── worldbook/state_rules.js             (调优)
-│   ├── ai_server/*                          (模型适配优化)
-│   └── ui/*                                 (性能优化 + 边缘情况)
-```
+| 旧排期 | 内容 | 新排期 |
+|--------|------|--------|
+| Phase 2 §2.1 | theory_state.js | → Phase 2 |
+| Phase 2 §2.2 | client_templates / case_session / countertransference | → Phase 1 已完成 |
+| Phase 2 §2.3 | world_book / preset 扩充 | → Phase 4 |
+| Phase 3 §3.1 | ethics_dilemma.js | → Phase 1 已完成（基础版）+ Phase 3 改造 |
+| Phase 3 §3.4 | personal_therapy.js | → Phase 2 |
+| Phase 3B 全部 | 惩罚机制优化 | → Phase 3（合并） |
+| Phase 3 §3.2/3.3/3.5/3.6 | 理论整合/职业事件/督导/传承 | → Phase 4（后续迭代） |
 
 ---
 
@@ -137,12 +131,11 @@ psydoctor/
 
 1. **开始一个阶段前**：阅读对应 phase 文件的全部任务清单
 2. **完成一个子任务**：将该行的 `- [ ]` 改为 `- [x]`
-3. **一个阶段全部完成**：
-   - 所有 `- [ ]` 均已变为 `- [x]`
-   - 完成标准全部达成
-   - 将文件重命名为 `phase-{N}-{name}-done.md`
+3. **一个阶段全部完成**：所有 `- [ ]` 均已变为 `- [x]`，将文件重命名为 `phase-{N}-{name}-done.md`
 4. **版本控制**：每个阶段完成后 commit 一次
+5. **旧排期文件归档**：`phase-2-depth.md`、`phase-3-advanced.md`、`phase-3B-punishment.md` 保留为历史参考
 
 ---
 
-*创建日期：2026-06-18*
+*版本：v2.0 | 更新日期：2026-06-26*
+*原因：AI 管线从双回合架构重构为多角色 AI 架构*
