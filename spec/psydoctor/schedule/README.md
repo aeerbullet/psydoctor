@@ -8,12 +8,13 @@
 
 ## 阶段总览
 
-| 阶段 | 文件 | 目标 | 新建/改造文件数 |
-|------|------|------|-----------|
-| Phase 1 | [phase-1-core.md](phase-1-core.md) | 核心框架（可玩原型）✅ | 已完成（233/271） |
-| Phase 2 | [phase-2-ai-pipeline.md](phase-2-ai-pipeline.md) | 多角色 AI 管线 + 发言系统 | 5 新建 + 7 改造 + 1 废弃 |
-| Phase 3 | [phase-3-gameplay.md](phase-3-gameplay.md) | 惩罚机制 + 声誉 + 执照 + 风险仪表盘 | 5 新建 + 8 改造 |
-| Phase 4 | [phase-4-polish.md](phase-4-polish.md) | 打磨完善 + 前缀缓存调优 | 全模块 |
+| 阶段 | 文件 | 目标 | 
+|------|------|------|
+| Phase 1 | [phase-1-core.md](phase-1-core.md) | 核心框架（可玩原型）✅ |
+| **🟢 NOW** | [**phase-2-reconstruct.md**](phase-2-reconstruct.md) | **多角色 AI 管线渐进重构（5 个 Checkpoint）** |
+| Phase 2 详细 | [phase-2-ai-pipeline.md](phase-2-ai-pipeline.md) | 完整任务清单与验证标准 |
+| Phase 3 | [phase-3-gameplay.md](phase-3-gameplay.md) | 惩罚机制 + 声誉 + 执照 + 风险仪表盘 |
+| Phase 4 | [phase-4-polish.md](phase-4-polish.md) | 打磨完善 |
 
 ---
 
