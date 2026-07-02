@@ -116,4 +116,4 @@ psydoctor/
 
 ## 📄 License
 
-本项目仅供学习和个人使用。
+[MIT License](LICENSE) — 自由使用、修改、分发。
