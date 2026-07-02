@@ -60,12 +60,16 @@
   function normalizeCharacter(personData) {
     if (!personData) return null;
 
+    var RoleSpeechProfile = global.RoleSpeechProfile;
+
     var person = {
       id: personData.id || ("person_" + Date.now().toString(36)),
       displayName: personData.displayName || "未知人物",
       role: personData.role || "colleague", // supervisor / colleague / client / mentor
       theoryOrientation: personData.theoryOrientation || "",
       characterSheet: null,
+      // v2.0: 角色发言人格档案
+      speechProfile: personData.speechProfile || null,
     };
 
     // 构建 characterSheet
@@ -89,6 +93,11 @@
       };
     }
 
+    // 自动生成 speechProfile（如果外部未提供）
+    if (!person.speechProfile && RoleSpeechProfile) {
+      person.speechProfile = RoleSpeechProfile.createInitialSpeechProfile(person);
+    }
+
     // 复制额外字段
     if (personData.age !== undefined) person.characterSheet.age = personData.age;
     if (personData.gender !== undefined) person.characterSheet.gender = personData.gender;
@@ -100,6 +109,8 @@
   // ===== 创建新来访者档案 =====
   function createNewClient(clientData) {
     if (!clientData) return null;
+
+    var RoleSpeechProfile = global.RoleSpeechProfile;
 
     var now = Date.now().toString(36);
     var client = {
@@ -115,6 +126,8 @@
       treatmentPhase: "initial",
       defenseStatus: "理智化",
       clientSheet: null,
+      // v2.0: 角色发言人格档案
+      speechProfile: clientData.speechProfile || null,
     };
 
     // 构建 clientSheet
@@ -124,6 +137,11 @@
     // 初始化 symptomLevel
     if (clientData.symptomLevel !== undefined) client.symptomLevel = clientData.symptomLevel;
     if (clientData.defenseStatus) client.defenseStatus = clientData.defenseStatus;
+
+    // 自动生成 speechProfile（如果外部未提供）
+    if (!client.speechProfile && RoleSpeechProfile) {
+      client.speechProfile = RoleSpeechProfile.createInitialSpeechProfile(client);
+    }
 
     return client;
   }

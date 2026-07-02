@@ -519,6 +519,25 @@
   ];
 
   // ================================================================
+  // 世界 AI 预设（v2.0 新增）
+  // World AI 的 system prompt 在 world_ai.js 中维护（确保缓存友好），
+  // 此处仅提供获取委托。
+  // ================================================================
+
+  /**
+   * 获取世界 AI 的固定 system prompt
+   * 委托给 PsyDoctorWorldAI，确保唯一真实来源。
+   */
+  function getWorldAiSystemPrompt() {
+    var WorldAI = global.PsyDoctorWorldAI;
+    if (WorldAI && typeof WorldAI.getWorldAiSystemPrompt === "function") {
+      return WorldAI.getWorldAiSystemPrompt();
+    }
+    // 兜底：返回简要提示
+    return "你是心理医生成长记的世界叙事AI。请根据游戏上下文生成环境叙事和发言顺序表。";
+  }
+
+  // ================================================================
   // 对外暴露 API
   // ================================================================
   global.PsyDoctorPresetContent = {
@@ -533,6 +552,11 @@
 
     /** 模板变量列表 */
     templateVariables: TEMPLATE_VARIABLES,
+
+    // ---- v2.0 新增 ----
+
+    /** 获取世界 AI 的固定 system prompt（委托给 PsyDoctorWorldAI） */
+    getWorldAiSystemPrompt: getWorldAiSystemPrompt,
 
     // ---- 便捷方法 ----
 

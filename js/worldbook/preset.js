@@ -399,6 +399,19 @@
   }
 
   // ================================================================
+  // 世界 AI 预设获取（v2.0 新增）
+  // ================================================================
+
+  /** 获取世界 AI 的固定 system prompt（委托给 PsyDoctorPresetContent） */
+  function getWorldAiSystemPrompt() {
+    var content = getContent();
+    if (content && typeof content.getWorldAiSystemPrompt === "function") {
+      return content.getWorldAiSystemPrompt();
+    }
+    return "你是心理医生成长记的世界叙事AI。";
+  }
+
+  // ================================================================
   // 对外暴露 API
   // ================================================================
   global.PsyDoctorAiPreset = {
@@ -411,6 +424,9 @@
     getActiveRulePresets: getActiveRulePresets,
     getActiveRulePresetContents: getActiveRulePresetContents,
     getActiveRulePresetsText: getActiveRulePresetsText,
+
+    /** 世界 AI 预设（v2.0） */
+    getWorldAiSystemPrompt: getWorldAiSystemPrompt,
 
     /** 模板变量 */
     fillTemplateVars: fillTemplateVars,

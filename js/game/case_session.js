@@ -434,6 +434,18 @@
     }
   }
 
+  // ===== 获取当前会话的来访者对象 =====
+  function getSessionClient(G) {
+    var session = G.activeCaseSession;
+    if (!session || !G.currentClients) return null;
+    for (var i = 0; i < G.currentClients.length; i++) {
+      if (G.currentClients[i].id === session.clientId) {
+        return G.currentClients[i];
+      }
+    }
+    return null;
+  }
+
   // ===== 暴露 API =====
   global.CaseSessionEngine = {
     INTERVENTION_TYPES: INTERVENTION_TYPES,
@@ -443,5 +455,6 @@
     runCaseSessionRound: runCaseSessionRound,
     computeSessionOutcome: computeSessionOutcome,
     applySessionResultToGame: applySessionResultToGame,
+    getSessionClient: getSessionClient,
   };
 })(typeof window !== "undefined" ? window : globalThis);

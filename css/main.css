@@ -462,6 +462,56 @@ body {
   color: #c0a0e0;
 }
 
+/* ===== Checkpoint 4: 个案会话干预按钮 ===== */
+.psy-intervention-btn {
+  flex: 1;
+  min-width: 5rem;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 2px solid #4ecb71;
+  background: #0d1f15;
+  color: #8aab98;
+  cursor: pointer;
+  transition: all 0.12s;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.psy-intervention-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.3);
+  border-color: #6aeb91;
+  color: #b0d0b8;
+}
+
+.psy-intervention-btn:active {
+  transform: translateY(0);
+}
+
+.psy-intervention-btn--end {
+  border-color: #cc5555;
+  color: #cc8888;
+}
+
+.psy-intervention-btn--end:hover {
+  border-color: #ee7777;
+  color: #eeaaaa;
+}
+
+/* ===== 禁用的聊天输入 ===== */
+.psy-chat-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.psy-chat-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ===== NPC pane (right) ===== */
 .psy-npc-list {
   display: flex;

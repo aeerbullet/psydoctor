@@ -9,6 +9,22 @@
 
   var AI_GENERATING_FLAG = "PSY_AI_GENERATING";
 
+  // ===== v2.0: 新管线标志（true=世界AI+角色AI, false=旧叙事AI）=====
+  var USE_NEW_PIPELINE = true;
+
+  // ===== Checkpoint 4: 个案会话 UI 状态 =====
+  var INTERVENTION_BUTTONS_SHOWN = false;
+
+  // ===== 干预技术中文名映射 =====
+  var INTERVENTION_LABELS = {
+    empathicResponse: "共情回应",
+    interpretation: "诠释干预",
+    behavioralTech: "行为技术",
+    experientialTech: "体验技术",
+    systemicIntervention: "系统干预",
+    silentPresence: "沉默在场",
+  };
+
   // ===== DOM 缓存 =====
   var _dom = {};
 
@@ -70,7 +86,7 @@
     });
   }
 
-  // ===== 完整回合序列 =====
+  // ===== 完整回合序列（v2.0 多角色 AI 管线） =====
   function handleChatSend(userText) {
     var G = getGame();
     if (!G) {
@@ -85,7 +101,10 @@
       return;
     }
     if (G.activeCaseSession) {
-      appendChatMessage("正在进行个案会话，请先完成当前会话。", "system");
+      // Checkpoint 4: 正在个案会话中 — 尝试启动 UI（如尚未激活）
+      if (!INTERVENTION_BUTTONS_SHOWN) {
+        renderCaseSessionUI(G);
+      }
       return;
     }
     if (G.activeEthicalDilemma) {
@@ -101,30 +120,202 @@
 
     var fc = G.fateChoice;
 
-    // Step 2: 叙事 AI
-    runStoryAiTurn(trimmed, G, fc).then(function (storyResult) {
-      // Step 3: 显示行动建议
+    if (USE_NEW_PIPELINE) {
+      runNewPipeline(trimmed, G, fc);
+    } else {
+      runOldPipeline(trimmed, G, fc);
+    }
+  }
+
+  // ===== v2.0 新管线：世界 AI → 角色 AI(s) → 状态 AI =====
+  function runNewPipeline(userText, G, fc) {
+    var narrativeText = userText;
+
+    runWorldAiTurn(userText, G, fc)
+      .then(function (worldResult) {
+        // Step 3: 行动建议
+        if (worldResult && worldResult.actionSuggestions) {
+          renderActionSuggestions(worldResult.actionSuggestions);
+        }
+
+        narrativeText = worldResult ? worldResult.text || userText : userText;
+
+        // 写入 chatHistory
+        if (worldResult && worldResult.text) {
+          G.chatHistory.push({ role: "assistant", content: worldResult.text });
+          // 替换流式中间文本为干净版
+          var logEl = _dom.chatLog;
+          if (logEl) {
+            var lastAsst = logEl.querySelector(".psy-chat-msg--assistant:last-child");
+            if (lastAsst) {
+              lastAsst.textContent = stripPsyTags(worldResult.text);
+            }
+          }
+        }
+
+        showStatus("角色发言中...");
+
+        // 角色 AI 阶段
+        var schedule = worldResult ? worldResult.speechSchedule || [] : [];
+        return runRoleAiPhase(schedule, narrativeText, G);
+      })
+      .then(function (roleResult) {
+        var combined = narrativeText;
+        if (roleResult && roleResult.speeches && roleResult.speeches.length > 0) {
+          roleResult.speeches.forEach(function (s) {
+            if (s && s.text) {
+              G.chatHistory.push({
+                role: "assistant",
+                content: "【" + (s.roleName || "角色") + "】\n" + s.text,
+              });
+            }
+          });
+          combined += "\n\n" + (roleResult.combinedText || "");
+        }
+
+        // Step 4: 状态 AI
+        showStatus("状态同步中...");
+        return runStateAiTurn(combined, G, fc);
+      })
+      .then(function () {
+        // Step 5-6: 后处理 + 刷新
+        postProcessChecks(G);
+        refreshUI(G);
+        setGenerating(false);
+      })
+      .catch(function (err) {
+        handlePipelineError(err, userText, G, fc);
+      });
+  }
+
+  // ===== 新管线错误处理（含回退逻辑） =====
+  function handlePipelineError(err, userText, G, fc) {
+    var log = global.GameLog || global.console;
+
+    if (err && err.roleAiFailed) {
+      // 角色 AI 失败但世界 AI 成功 → 跳过角色，继续状态同步
+      (log.warn || console.warn)("[psy:role] 角色发言失败，跳过");
+      runStateAiTurn(userText, G, fc)
+        .then(function () {
+          postProcessChecks(G);
+          refreshUI(G);
+          setGenerating(false);
+        })
+        .catch(function (stateErr) {
+          appendChatMessage("状态同步出错：" + (stateErr.message || stateErr), "system");
+          setGenerating(false);
+        });
+      return;
+    }
+
+    if (err && err.fallbackToOld) {
+      // 世界 AI 失败 → 永久回退旧管线
+      (log.log || console.log)("[psy:ai] 世界AI不可用，切换旧管线");
+      USE_NEW_PIPELINE = false;
+      runOldPipeline(userText, G, fc);
+      return;
+    }
+
+    // 其他错误
+    (log.warn || console.warn)("[psy:ai] 回合失败:", err);
+    appendChatMessage("AI 响应出错：" + (err.message || err), "system");
+    setGenerating(false);
+  }
+
+  // ===== 世界 AI 回合（v2.0 新建） =====
+  function runWorldAiTurn(userText, G, fc) {
+    showStatus("构建世界中...");
+
+    var PsyDoctorWorldAI = global.PsyDoctorWorldAI;
+    if (!PsyDoctorWorldAI || !PsyDoctorWorldAI.sendWorldAiTurn) {
+      var err = new Error("世界 AI 不可用");
+      err.fallbackToOld = true;
+      return Promise.reject(err);
+    }
+
+    var startTime = Date.now();
+    showProcessLog("story", "世界 AI 叙事中…");
+
+    return PsyDoctorWorldAI.sendWorldAiTurn(userText, G, fc, {
+      onChunk: function (chunk, full) {
+        if (!full) return;
+        var i0 = full.indexOf("<psy_story_body>");
+        if (i0 < 0) return;
+        var start = i0 + "<psy_story_body>".length;
+        var i1 = full.indexOf("</psy_story_body>", start);
+        var visible = i1 >= 0 ? full.slice(start, i1) : full.slice(start);
+        if (visible) appendChatMessage(visible, "assistant", true);
+      },
+      onError: function () {
+        showProcessLog("story", "世界 AI 失败", true);
+      },
+    }).then(function (response) {
+      var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      showProcessLog("story", "世界 AI 完成 (" + elapsed + "s)", true);
+      return response;
+    }).catch(function (err) {
+      showProcessLog("story", "世界 AI 失败", true);
+      err.fallbackToOld = true;
+      throw err;
+    });
+  }
+
+  // ===== 角色 AI 发言阶段（v2.0 新建） =====
+  function runRoleAiPhase(speechSchedule, narrativeText, G) {
+    if (!speechSchedule || !speechSchedule.length) {
+      return Promise.resolve({ speeches: [], combinedText: "" });
+    }
+
+    var PsyDoctorRoleAI = global.PsyDoctorRoleAI;
+    if (!PsyDoctorRoleAI || !PsyDoctorRoleAI.runRoleAiPhase) {
+      return Promise.resolve({ speeches: [], combinedText: "" });
+    }
+
+    showProcessLog("state", "角色发言中…");
+
+    return PsyDoctorRoleAI.runRoleAiPhase(speechSchedule, narrativeText, G, {})
+      .then(function (result) {
+        showProcessLog("state", "角色发言完成", true);
+
+        // 追加角色发言到聊天区
+        if (result && result.speeches) {
+          result.speeches.forEach(function (s) {
+            if (s && s.text) {
+              var cleanText = stripPsyTags(s.text);
+              if (cleanText) {
+                appendChatMessage("【" + (s.roleName || "角色") + "】\n" + cleanText, "assistant");
+              }
+            }
+          });
+        }
+        return result;
+      })
+      .catch(function (err) {
+        (global.GameLog || console).warn("[psy:role] 角色AI出错:", err);
+        err.roleAiFailed = true;
+        throw err;
+      });
+  }
+
+  // ===== 旧管线兜底 =====
+  function runOldPipeline(userText, G, fc) {
+    runStoryAiTurn(userText, G, fc).then(function (storyResult) {
       if (storyResult && storyResult.actionSuggestions) {
         renderActionSuggestions(storyResult.actionSuggestions);
       }
-
-      // Step 4: 状态 AI
-      return runStateAiTurn(storyResult ? storyResult.storyBody : trimmed, G, fc);
+      return runStateAiTurn(storyResult ? storyResult.storyBody : userText, G, fc);
     }).then(function () {
-      // Step 5: 后处理与触发器检查
       postProcessChecks(G);
-      // Step 6: 刷新 UI
       refreshUI(G);
       setGenerating(false);
     }).catch(function (err) {
-      var log = global.GameLog || global.console;
-      (log.warn || console.warn)("[psy:ai] 回合失败:", err);
+      (global.GameLog || console).warn("[psy:ai] 旧管线失败:", err);
       appendChatMessage("AI 响应出错：" + (err.message || err), "system");
       setGenerating(false);
     });
   }
 
-  // ===== 叙事 AI 回合 =====
+  // ===== 叙事 AI 回合（旧，保留兜底） =====
   function runStoryAiTurn(userText, G, fc) {
     showStatus("思考中...");
 
@@ -139,49 +330,39 @@
 
     return PsyDoctorStoryGenerate.sendTurn(userText, G, fc, {
       onChunk: function (chunk, full) {
-        // 流式输出：用前置过滤器只显示 <psy_story_body> 内的内容，隐藏推理文本
         var visible = PsyDoctorStoryGenerate.visibleNarrativeForStreamingChunk(full);
         if (visible) {
           appendChatMessage(visible, "assistant", true);
-        } else if (full && full.indexOf("<psy_story_body>") < 0) {
-          // 还没出现正文标签时完全隐藏（模型仍在输出推理）
         }
       },
-      onError: function (err) {
+      onError: function () {
         showProcessLog("story", "叙事 AI 失败", true);
       },
     }).then(function (response) {
       var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       showProcessLog("story", "叙事 AI 完成 (" + elapsed + "s)", true);
 
-      // 写入 chatHistory（完整含标签）
       if (response && response.text) {
         G.chatHistory.push({ role: "assistant", content: response.text });
       }
 
-      // 完整管线解析，用 resolveStoryReplyForPipeline 而非简单提取
       var storyToShow = response && response.storyBody ? response.storyBody : stripPsyTags(response ? response.text : "");
       if (storyToShow) {
-        var log = _dom.chatLog;
-        if (log) {
-          var lastAssistant = log.querySelector(".psy-chat-msg--assistant:last-child");
-          if (lastAssistant) {
-            // 替换流式渲染的原始文本为干净正文（剥离 <psy_*> 避免泄漏）
+        var logEl = _dom.chatLog;
+        if (logEl) {
+          var lastAsst = logEl.querySelector(".psy-chat-msg--assistant:last-child");
+          if (lastAsst) {
             var cleaned = PsyDoctorStoryGenerate.stripStoryAiMetaLeakFromNarrative(stripPsyTags(storyToShow));
-            lastAssistant.textContent = cleaned || storyToShow;
+            lastAsst.textContent = cleaned || storyToShow;
           } else {
-            // 非流式模式，直接追加（已经过 pipeline 剥离）
             appendChatMessage(storyToShow, "assistant");
           }
         }
       }
 
-      // 检查个案触发
       if (response && response.caseSessionTrigger) {
         G.pendingCaseSession = response.caseSessionTrigger;
       }
-
-      // 检查伦理困境
       if (response && response.ethicalDilemma) {
         var EthicsDilemmaEngine = global.EthicsDilemmaEngine;
         if (EthicsDilemmaEngine) {
@@ -236,6 +417,8 @@
         CaseSessionEngine.startCaseSession(G.pendingCaseSession, G);
         G.pendingCaseSession = null;
         appendChatMessage("📋 个案会话已启动！", "system");
+        // Checkpoint 4: 立即渲染个案会话 UI（干预按钮 + 禁用输入）
+        renderCaseSessionUI(G);
       }
     }
 
@@ -303,6 +486,267 @@
         btn.setAttribute("hidden", "");
       }
     });
+  }
+
+  // ===== Checkpoint 4: 个案会话 UI =====================================
+  // 在建议按钮区域渲染 6 种干预技术按钮
+  // =====================================================================
+
+  function renderCaseSessionUI(G) {
+    var session = G.activeCaseSession;
+    if (!session) return;
+    if (INTERVENTION_BUTTONS_SHOWN) return; // 已渲染
+
+    INTERVENTION_BUTTONS_SHOWN = true;
+
+    // 禁用文本输入
+    disableChatInput(true);
+
+    // 显示会话状态
+    var client = getCaseSessionClient(G);
+    var clientName = (client && client.displayName) || "来访者";
+    var roundNum = session.round + 1;
+    var maxRounds = session.maxRounds || 20;
+
+    appendChatMessage("━━━ 📋 个案会话 · 第 " + roundNum + "/" + maxRounds + " 回合 ━━━", "system");
+    appendChatMessage(clientName
+      + " | 症状：" + session.currentSymptom + "/100"
+      + " | 联盟：" + session.currentAlliance + "/100"
+      + " | 洞察：" + (session.insightGained || 0).toFixed(1), "system");
+    appendChatMessage("请选择你的干预技术：", "system");
+
+    // 渲染干预技术按钮
+    renderInterventionButtons(G);
+  }
+
+  function renderInterventionButtons(G) {
+    var area = _dom.suggestionArea;
+    if (!area) return;
+
+    // 清空建议按钮区域
+    area.innerHTML = "";
+
+    var types = Object.keys(INTERVENTION_LABELS);
+    types.forEach(function (type) {
+      var btn = document.createElement("button");
+      btn.className = "psy-suggestion-btn psy-intervention-btn";
+      btn.textContent = INTERVENTION_LABELS[type];
+      btn.setAttribute("data-technique", type);
+      btn.addEventListener("click", function () {
+        handleCaseSessionIntervention(type, G);
+      });
+      area.appendChild(btn);
+    });
+
+    // 添加"结束会话"按钮
+    var endBtn = document.createElement("button");
+    endBtn.className = "psy-suggestion-btn psy-intervention-btn psy-intervention-btn--end";
+    endBtn.textContent = "⏹ 提前结束";
+    endBtn.addEventListener("click", function () {
+      finishCaseSession(G, G.activeCaseSession);
+    });
+    area.appendChild(endBtn);
+  }
+
+  function handleCaseSessionIntervention(techniqueType, G) {
+    var session = G.activeCaseSession;
+    if (!session || session.terminated) return;
+    if (global[AI_GENERATING_FLAG]) return;
+
+    var CaseSessionEngine = global.CaseSessionEngine;
+    var PsyDoctorRoleAI = global.PsyDoctorRoleAI;
+    if (!CaseSessionEngine) return;
+
+    setGenerating(true);
+
+    // 隐藏按钮 → 清空建议区
+    var area = _dom.suggestionArea;
+    if (area) area.innerHTML = "";
+    showStatus("来访者回应中...");
+
+    // 1. 显示玩家选择的干预技术
+    var techLabel = INTERVENTION_LABELS[techniqueType] || techniqueType;
+    appendChatMessage("你使用了「" + techLabel + "」", "user");
+
+    // 2. 计算干预效果（纯数据）
+    var result = CaseSessionEngine.runCaseSessionRound(techniqueType, G);
+    if (!result) {
+      appendChatMessage("⚠ 回合计算异常", "system");
+      setGenerating(false);
+      return;
+    }
+
+    // 3. 获取来访者对象，生成角色 AI 回应
+    var client = CaseSessionEngine.getSessionClient(G);
+
+    if (client && PsyDoctorRoleAI && PsyDoctorRoleAI.callSingleRoleAI) {
+      // 构建 AI 场景上下文
+      var narrativeContext = "这是一次心理咨询会话。";
+      narrativeContext += "来访者" + (client.displayName || "") + "，主要问题：" + (client.chiefComplaint || "心理困扰") + "。";
+      narrativeContext += "当前症状水平：" + session.currentSymptom + "/100。";
+      narrativeContext += "当前治疗联盟：" + session.currentAlliance + "/100。";
+      narrativeContext += "治疗师刚刚使用了「" + techLabel + "」技术。";
+
+      PsyDoctorRoleAI.callSingleRoleAI(client, {
+        sceneNarrative: narrativeContext,
+        previousSpeech: null,
+        recentHistorySummary: null,
+      }, {
+        onChunk: function (chunk) {
+          // 流式渲染来访者回应
+          appendChatMessage(chunk, "client", true);
+        },
+        signal: null,
+      }).then(function (aiResult) {
+        // 4. 显示效果摘要
+        showCaseSessionEffectSummary(result.effect, techniqueType);
+
+        // 5. 写入聊天历史
+        if (aiResult && aiResult.text) {
+          G.chatHistory.push({
+            role: "assistant",
+            content: "【" + (client.displayName || "来访者") + "】\n" + aiResult.text,
+          });
+        }
+
+        // 6. 检查会话是否结束
+        if (result.session.terminated) {
+          finishCaseSession(G, session);
+        } else {
+          // 重新显示干预按钮
+          renderInterventionButtons(G);
+        }
+
+        setGenerating(false);
+        refreshUI(G);
+      }).catch(function (err) {
+        (global.GameLog || console).warn("[psy:session] 角色AI出错:", err);
+        // 角色 AI 失败时跳过，仅显示效果
+        appendChatMessage("（来访者回应生成失败，跳过）", "system");
+        showCaseSessionEffectSummary(result.effect, techniqueType);
+
+        if (result.session.terminated) {
+          finishCaseSession(G, session);
+        } else {
+          renderInterventionButtons(G);
+        }
+        setGenerating(false);
+        refreshUI(G);
+      });
+    } else {
+      // 无角色 AI 模块时跳过
+      showCaseSessionEffectSummary(result.effect, techniqueType);
+
+      if (result.session.terminated) {
+        finishCaseSession(G, session);
+      } else {
+        renderInterventionButtons(G);
+      }
+      setGenerating(false);
+      refreshUI(G);
+    }
+  }
+
+  function showCaseSessionEffectSummary(effect, techniqueType) {
+    if (!effect) return;
+    var parts = [];
+    if (effect.allianceChange) parts.push("联盟 " + (effect.allianceChange > 0 ? "+" : "") + effect.allianceChange);
+    if (effect.symptomChange) parts.push("症状 " + (effect.symptomChange > 0 ? "+" : "") + effect.symptomChange);
+    if (effect.defenseChange) parts.push("防御 " + (effect.defenseChange > 0 ? "+" : "") + effect.defenseChange);
+    if (effect.insightGain) parts.push("洞察 +" + effect.insightGain.toFixed(1));
+    var text = "📊 效果：" + (parts.length > 0 ? parts.join(" | ") : "无明显变化");
+    appendChatMessage(text, "system");
+  }
+
+  function finishCaseSession(G, session) {
+    if (!session) return;
+
+    var CaseSessionEngine = global.CaseSessionEngine;
+    if (!CaseSessionEngine) return;
+
+    // 获取来访者
+    var client = CaseSessionEngine.getSessionClient(G);
+
+    // 若尚未结算（如点击"提前结束"），手动结算
+    if (!session.outcome && client) {
+      session.outcome = CaseSessionEngine.computeSessionOutcome(session, client);
+    }
+
+    // 应用结果到游戏（内部清理 G.activeCaseSession）
+    var appResult = CaseSessionEngine.applySessionResultToGame(G);
+
+    // 显示结算
+    if (appResult || session.outcome) {
+      var o = appResult || session.outcome;
+      var ratingMap = { S: "卓越", A: "优秀", B: "良好", C: "及格", D: "不及格" };
+      appendChatMessage("━━━ 📊 个案结算 ━━━", "system");
+      appendChatMessage("评级：" + (ratingMap[o.rating] || o.rating)
+        + " | 症状改善：" + (o.symptomImprove || 0) + "%"
+        + " | 联盟维持：" + (o.allianceMaintain || 0) + "%"
+        + " | 总回合：" + (o.totalRounds || session.round), "system");
+    }
+
+    // 恢复常规 UI
+    restoreNormalUI(G);
+
+    // 个案后自动叙事（architecture §9.5）
+    var clientName = (client && client.displayName) || "来访者";
+    var roundCount = session.round || 0;
+    setTimeout(function () {
+      var autoMsg = "本节与" + clientName + "的咨询会话已结束（共" + roundCount + "回合）。请写下衔接叙事：咨询师在咨询后的内心活动、" + clientName + "离开后的氛围、下次咨询的安排。";
+      handleChatSend(autoMsg);
+    }, 500);
+  }
+
+  function restoreNormalUI(G) {
+    INTERVENTION_BUTTONS_SHOWN = false;
+
+    // 启用输入
+    disableChatInput(false);
+
+    // 清空并恢复建议区域
+    var area = _dom.suggestionArea;
+    if (area) {
+      area.innerHTML = "";
+      // 重新创建默认的建议按钮
+      var levels = ["aggressive", "neutral", "cautious", "veryCautious"];
+      var defaultLabels = { aggressive: "积极行动", neutral: "日常行动", cautious: "谨慎选择", veryCautious: "深度反思" };
+      levels.forEach(function (level) {
+        var btn = document.createElement("button");
+        btn.className = "psy-suggestion-btn psy-suggestion-btn--" + level + " hidden";
+        btn.setAttribute("data-suggestion", level);
+        btn.setAttribute("hidden", "");
+        area.appendChild(btn);
+      });
+    }
+
+    showStatus("");
+    refreshUI(G);
+  }
+
+  // ===== 禁/启用聊天输入 =====
+  function disableChatInput(disabled) {
+    var input = _dom.chatInput;
+    if (input) input.disabled = disabled;
+    var sendBtn = _dom.sendBtn;
+    if (sendBtn) sendBtn.disabled = disabled;
+  }
+
+  // ===== 获取当前会话的来访者（简便方法） =====
+  function getCaseSessionClient(G) {
+    var CaseSessionEngine = global.CaseSessionEngine;
+    if (CaseSessionEngine && CaseSessionEngine.getSessionClient) {
+      return CaseSessionEngine.getSessionClient(G);
+    }
+    // 兜底
+    var session = G.activeCaseSession;
+    if (!session || !G.currentClients) return null;
+    for (var i = 0; i < G.currentClients.length; i++) {
+      if (G.currentClients[i].id === session.clientId) {
+        return G.currentClients[i];
+      }
+    }
+    return null;
   }
 
   // ===== 显示伦理困境弹窗 =====
@@ -386,13 +830,14 @@
     }
 
     if (isStream) {
-      // 流式消息已由 visibleNarrativeForStreamingChunk 过滤，无需再剥离
+      // 流式消息：根据 role 匹配对应的消息类型（assistant / client / etc.）
+      var streamClass = "psy-chat-msg--" + (role || "assistant");
       var last = log.lastElementChild;
-      if (last && last.classList.contains("psy-chat-msg--assistant")) {
-        last.textContent = text; // 替换而不是追加，因为 streaming filter 的每次调用都基于 full 文本
+      if (last && last.classList.contains(streamClass)) {
+        last.textContent = text; // 替换而不是追加
       } else {
         var div = document.createElement("div");
-        div.className = "psy-chat-msg psy-chat-msg--assistant";
+        div.className = "psy-chat-msg " + streamClass;
         div.textContent = text;
         log.appendChild(div);
       }
@@ -454,13 +899,24 @@
     }
   }
 
-  // ===== 暴露 API =====
+  // ===== 暴露 API（v2.0: 新增新管线函数） =====
   global.PsyMainScreenChat = {
     init: init,
     handleChatSend: handleChatSend,
+    /** v2.0 新管线函数 */
+    runNewPipeline: runNewPipeline,
+    runWorldAiTurn: runWorldAiTurn,
+    runRoleAiPhase: runRoleAiPhase,
+    /** 旧管线（保留兜底） */
+    runOldPipeline: runOldPipeline,
     runStoryAiTurn: runStoryAiTurn,
     runStateAiTurn: runStateAiTurn,
     appendChatMessage: appendChatMessage,
     renderActionSuggestions: renderActionSuggestions,
+    /** Checkpoint 4: 个案会话 UI */
+    renderCaseSessionUI: renderCaseSessionUI,
+    handleCaseSessionIntervention: handleCaseSessionIntervention,
+    finishCaseSession: finishCaseSession,
+    renderInterventionButtons: renderInterventionButtons,
   };
 })(typeof window !== "undefined" ? window : globalThis);
