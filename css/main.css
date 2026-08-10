@@ -442,26 +442,6 @@ body {
   filter: brightness(1.3);
 }
 
-.psy-suggestion-btn--aggressive {
-  border-color: #ff6b9d;
-  color: #ffa0c0;
-}
-
-.psy-suggestion-btn--neutral {
-  border-color: #4ecb71;
-  color: #8aab98;
-}
-
-.psy-suggestion-btn--cautious {
-  border-color: #ffaa44;
-  color: #ffcc66;
-}
-
-.psy-suggestion-btn--veryCautious {
-  border-color: #a080c0;
-  color: #c0a0e0;
-}
-
 /* ===== Checkpoint 4: 个案会话干预按钮 ===== */
 .psy-intervention-btn {
   flex: 1;

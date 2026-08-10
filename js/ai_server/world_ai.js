@@ -72,13 +72,7 @@
     "     \"speechSchedule\": [",
     "       { \"id\": \"client_001\", \"role\": \"client\", \"turn\": 1 },",
     "       { \"id\": \"supv_001\", \"role\": \"supervisor\", \"turn\": 2 }",
-    "     ],",
-    "     \"actionSuggestions\": {",
-    "       \"aggressive\": \"积极行动建议\",",
-    "       \"neutral\": \"日常行动建议\",",
-    "       \"cautious\": \"谨慎行动建议\",",
-    "       \"veryCautious\": \"深度反思建议\"",
-    "     }",
+    "     ]",
     "   }",
     "",
     "3. 可选标签：<psy_theory_insight>, <psy_philosophy_reflection>（与旧架构一致）",
@@ -174,9 +168,6 @@
       if (!parsed.speechSchedule || !Array.isArray(parsed.speechSchedule)) {
         parsed.speechSchedule = [];
       }
-      if (!parsed.actionSuggestions) {
-        parsed.actionSuggestions = null;
-      }
       return parsed;
     } catch (e) {
       // 容错修复：单引号 → 双引号，key 补引号
@@ -231,14 +222,12 @@
       // 解析场景信息
       var sceneInfo = parseSceneInfo(text);
       var speechSchedule = sceneInfo ? sceneInfo.speechSchedule : [];
-      var actionSuggestions = sceneInfo ? sceneInfo.actionSuggestions : null;
 
       var response = {
         text: text,
         narrativeText: text,
         speechSchedule: speechSchedule,
         sceneInfo: sceneInfo,
-        actionSuggestions: actionSuggestions,
       };
 
       if (callbacks.onComplete) callbacks.onComplete(response);

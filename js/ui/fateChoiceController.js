@@ -511,7 +511,6 @@
       therapyTools: [],
       consultationRoomItems: [],
       chatHistory: [],
-      chatActionSuggestions: null,
       pendingCaseSession: null,
       activeCaseSession: null,
       caseSessionHistory: [],

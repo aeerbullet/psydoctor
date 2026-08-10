@@ -164,11 +164,6 @@
 
       PsyDoctorWorldGenerate.runOpeningStoryStrictPromise(fc, G, {})
         .then(function (result) {
-          // 从开局叙事 AI 响应中提取行动建议并存储
-          var PsyDoctorStoryGenerate = global.PsyDoctorStoryGenerate;
-          if (PsyDoctorStoryGenerate && result && result.text) {
-            G.chatActionSuggestions = PsyDoctorStoryGenerate.extractJSONTag(result.text, "psy_action_suggestions");
-          }
           var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
           updateGatePhase(1, "success", elapsed);
           resolve();
@@ -277,14 +272,6 @@
       PsyMainScreenPanelUi.renderLeftPanel(fc, G);
       PsyMainScreenPanelUi.renderRightPanel(G);
       PsyMainScreenPanelUi.renderChatHistory(G);
-    }
-
-    // 渲染开局行动建议按钮
-    if (G.chatActionSuggestions) {
-      var PsyMainScreenChat = global.PsyMainScreenChat;
-      if (PsyMainScreenChat && PsyMainScreenChat.renderActionSuggestions) {
-        PsyMainScreenChat.renderActionSuggestions(G.chatActionSuggestions);
-      }
     }
 
     // 持久化

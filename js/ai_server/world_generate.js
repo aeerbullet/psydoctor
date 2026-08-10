@@ -42,7 +42,7 @@
       lines.push("【注意】这是读档后重新生成开局叙事，请确保叙事内容与已有面板数据一致。");
     }
 
-    lines.push("请输出包含 <psy_story_body> 标签的叙事正文，以及 <psy_action_suggestions> 四级行动建议。");
+    lines.push("请输出包含 <psy_story_body> 标签的叙事正文。");
 
     return lines.join("\n");
   }

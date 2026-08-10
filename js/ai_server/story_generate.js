@@ -135,7 +135,6 @@
       var response = {
         text: result || "",
         storyBody: pipeline.sansLeak,
-        actionSuggestions: extractJSONTag(result, "psy_action_suggestions"),
         theoryInsight: extractJSONTag(result, "psy_theory_insight"),
         philosophyReflection: extractJSONTag(result, "psy_philosophy_reflection"),
         caseSessionTrigger: extractJSONTag(result, "psy_case_session_trigger"),

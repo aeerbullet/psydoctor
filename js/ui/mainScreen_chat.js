@@ -51,7 +51,6 @@
   function init() {
     cacheDom();
     bindSendButton();
-    bindSuggestionButtons();
   }
 
   // ===== 绑定发送按钮 =====
@@ -71,18 +70,6 @@
       handleChatSend(text);
       input.value = "";
       input.style.height = "auto";
-    });
-  }
-
-  // ===== 绑定建议按钮 =====
-  function bindSuggestionButtons() {
-    var area = _dom.suggestionArea;
-    if (!area) return;
-    area.querySelectorAll(".psy-suggestion-btn").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var text = this.textContent || this.getAttribute("data-text") || "";
-        if (text) handleChatSend(text);
-      });
     });
   }
 
@@ -133,11 +120,6 @@
 
     runWorldAiTurn(userText, G, fc)
       .then(function (worldResult) {
-        // Step 3: 行动建议
-        if (worldResult && worldResult.actionSuggestions) {
-          renderActionSuggestions(worldResult.actionSuggestions);
-        }
-
         narrativeText = worldResult ? worldResult.text || userText : userText;
 
         // 写入 chatHistory
@@ -300,9 +282,6 @@
   // ===== 旧管线兜底 =====
   function runOldPipeline(userText, G, fc) {
     runStoryAiTurn(userText, G, fc).then(function (storyResult) {
-      if (storyResult && storyResult.actionSuggestions) {
-        renderActionSuggestions(storyResult.actionSuggestions);
-      }
       return runStateAiTurn(storyResult ? storyResult.storyBody : userText, G, fc);
     }).then(function () {
       postProcessChecks(G);
@@ -463,29 +442,6 @@
     if (PsyMainScreenPanel) {
       PsyMainScreenPanel.autoSave();
     }
-  }
-
-  // ===== 渲染行动建议按钮 =====
-  function renderActionSuggestions(suggestions) {
-    var area = _dom.suggestionArea;
-    if (!area || !suggestions) return;
-
-    var levels = ["aggressive", "neutral", "cautious", "veryCautious"];
-    var labels = { aggressive: "积极行动", neutral: "日常行动", cautious: "谨慎选择", veryCautious: "深度反思" };
-
-    area.querySelectorAll(".psy-suggestion-btn").forEach(function (btn) {
-      var level = btn.getAttribute("data-suggestion");
-      var text = suggestions[level];
-      if (text) {
-        btn.textContent = (labels[level] || level) + "：" + text;
-        btn.setAttribute("data-text", text);
-        btn.classList.remove("hidden");
-        btn.removeAttribute("hidden");
-      } else {
-        btn.classList.add("hidden");
-        btn.setAttribute("hidden", "");
-      }
-    });
   }
 
   // ===== Checkpoint 4: 个案会话 UI =====================================
@@ -704,20 +660,10 @@
     // 启用输入
     disableChatInput(false);
 
-    // 清空并恢复建议区域
+    // 清空建议区域
     var area = _dom.suggestionArea;
     if (area) {
       area.innerHTML = "";
-      // 重新创建默认的建议按钮
-      var levels = ["aggressive", "neutral", "cautious", "veryCautious"];
-      var defaultLabels = { aggressive: "积极行动", neutral: "日常行动", cautious: "谨慎选择", veryCautious: "深度反思" };
-      levels.forEach(function (level) {
-        var btn = document.createElement("button");
-        btn.className = "psy-suggestion-btn psy-suggestion-btn--" + level + " hidden";
-        btn.setAttribute("data-suggestion", level);
-        btn.setAttribute("hidden", "");
-        area.appendChild(btn);
-      });
     }
 
     showStatus("");
@@ -912,7 +858,6 @@
     runStoryAiTurn: runStoryAiTurn,
     runStateAiTurn: runStateAiTurn,
     appendChatMessage: appendChatMessage,
-    renderActionSuggestions: renderActionSuggestions,
     /** Checkpoint 4: 个案会话 UI */
     renderCaseSessionUI: renderCaseSessionUI,
     handleCaseSessionIntervention: handleCaseSessionIntervention,

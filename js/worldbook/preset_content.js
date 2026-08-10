@@ -4,7 +4,7 @@
  * PsyDoctorPresetContent —— 叙事预设和规则预设的纯数据层。
  * 遵循 §13 双层预设结构，包含：
  *   1. 叙事预设（system prompt 模板）
- *   2. 规则预设（10 个 PSY_STORY_RULE_PRESET_IDS）
+ *   2. 规则预设（9 个 PSY_STORY_RULE_PRESET_IDS）
  *   3. 模板变量映射表
  *
  * 依赖关系：无（纯数据层，须先于 preset.js 加载）
@@ -13,7 +13,7 @@
   "use strict";
 
   // ================================================================
-  // PSY_STORY_RULE_PRESET_IDS — 10 个规则预设 ID 全集
+  // PSY_STORY_RULE_PRESET_IDS — 9 个规则预设 ID 全集
   // 这些规则预设独立于叙事预设，始终拼接在 system prompt 尾部
   // （详见 §13.2）
   // ================================================================
@@ -23,7 +23,6 @@
     "theoryRules",
     "ethicsGuidelines",
     "supervisionGuidelines",
-    "action_suggestions",
     "caseSessionRules",
     "careerEventRules",
     "story_snapshot",
@@ -59,8 +58,7 @@
         "",
         "每次输出必须包含：",
         "1. <psy_story_body>...</psy_story_body> — 人生叙事正文",
-        "2. <psy_action_suggestions>...</psy_action_suggestions> — 四级行动建议",
-        "3. 可选标签：理论洞见、哲学反思、个案触发、伦理困境",
+        "2. 可选标签：理论洞见、哲学反思、个案触发、伦理困境",
         "",
         "叙事中要自然地融入心理学专业元素。让每一次对话都推动角色成长。",
         "不要让来访者的症状在单一回合中戏剧性改善。心理治疗是渐进的过程。",
@@ -88,7 +86,7 @@
         "{{CURRENT_CLIENTS_SUMMARY}}",
         "{{PSYCHOLOGIST_BASE_STATS}}",
         "",
-        "输出必须包含 <psy_story_body> 和 <psy_action_suggestions>。",
+        "输出必须包含 <psy_story_body>。",
       ].join("\n"),
       temperature: 0.75,
       category: "narrative",
@@ -110,7 +108,7 @@
         "{{CURRENT_CLIENTS_SUMMARY}}",
         "{{PSYCHOLOGIST_BASE_STATS}}",
         "",
-        "输出必须包含 <psy_story_body> 和 <psy_action_suggestions>。",
+        "输出必须包含 <psy_story_body>。",
       ].join("\n"),
       temperature: 0.85,
       category: "narrative",
@@ -133,7 +131,7 @@
         "{{CURRENT_CLIENTS_SUMMARY}}",
         "{{PSYCHOLOGIST_BASE_STATS}}",
         "",
-        "输出必须包含 <psy_story_body> 和 <psy_action_suggestions>。",
+        "输出必须包含 <psy_story_body>。",
       ].join("\n"),
       temperature: 0.8,
       category: "narrative",
@@ -166,26 +164,21 @@
         "   - 内容：纯叙事正文，包含来访者话语、咨询师内心活动、咨询对话、日常叙事",
         "   - 示例：<psy_story_body>张某今天来得比平时早一些...</psy_story_body>",
         "",
-        "2. <psy_action_suggestions>",
-        "   - 内容：[aggressive/neutral/cautious/veryCautious] 四级的行动建议",
-        "   - 格式：{\"aggressive\":\"...\", \"neutral\":\"...\", \"cautious\":\"...\", \"veryCautious\":\"...\"}",
-        "   - 说明：aggressive=正面积极的行动，neutral=中性方案，cautious=谨慎方案，veryCautious=深度反思",
-        "",
         "=== 可选输出的标签 ===",
         "",
-        "3. <psy_theory_insight>",
+        "2. <psy_theory_insight>",
         "   - 内容：理论洞见获得",
         "   - 格式：{\"theoryName\":\"认知治疗\", \"stageGain\":\"理解了认知三联的概念\", \"content\":\"...\"}",
         "",
-        "4. <psy_philosophy_reflection>",
+        "3. <psy_philosophy_reflection>",
         "   - 内容：哲学思辨触发",
         "   - 格式：{\"dimension\":\"现象学\", \"insight\":\"...\", \"depthGain\":1}",
         "",
-        "5. <psy_case_session_trigger>",
+        "4. <psy_case_session_trigger>",
         "   - 内容：咨询个案触发",
         "   - 格式：{\"clientId\":\"client_001\", \"caseType\":\"存在危机型\", \"triggerKind\":\"scheduled\", \"initialAssessment\":\"...\"}",
         "",
-        "6. <psy_ethical_dilemma>",
+        "5. <psy_ethical_dilemma>",
         "   - 内容：伦理困境触发",
         "   - 格式：{\"dilemmaType\":\"dualRelationship\", \"scene\":\"...\", \"options\":[{\"label\":\"...\", \"description\":\"...\"}]}",
         "",
@@ -330,42 +323,6 @@
         "   - 督导兼具评价性和支持性双重功能",
         "   - 咨询师在督导中应保持开放心态",
         "   - 督导师的理论取向影响督导风格和内容",
-      ].join("\n"),
-    },
-
-    // ---------------------------------------------------------------
-    // action_suggestions — 四级行动建议规则
-    // ---------------------------------------------------------------
-    action_suggestions: {
-      id: "action_suggestions",
-      name: "行动建议规则",
-      content: [
-        "【四级行动建议规则】",
-        "",
-        "你必须生成 4 个行动建议（JSON 格式），覆盖不同风险/投入等级：",
-        "",
-        "1. aggressive（积极行动）：",
-        "   - 需要较高风险或精力的行动",
-        "   - 适合治疗联盟稳固、来访者有较高动力的情境",
-        "   - 例如：主动约来访者进行深度会谈、报名参加培训",
-        "",
-        "2. neutral（中性行动）：",
-        "   - 日常工作层面的合理选择",
-        "   - 适合大多数惯常情境",
-        "   - 例如：整理个案记录、准备督导材料、安排常规咨询",
-        "",
-        "3. cautious（谨慎行动）：",
-        "   - 保守、稳妥、注重自我关照的选择",
-        "   - 适合风险较高或不确定的情境",
-        "   - 例如：先查阅文献、和督导师讨论后再决定",
-        "",
-        "4. veryCautious（深度反思）：",
-        "   - 最保守的选择——注重内在反思和自我关照",
-        "   - 适合倦怠较高或反移情风险高时",
-        "   - 例如：给自己放半天假、写咨询日志反思、做正念练习",
-        "",
-        "注意：建议必须与当前叙事上下文和角色状态匹配。",
-        "不要总是推荐最积极的选项——让不同等级的建议都有吸引力。",
       ].join("\n"),
     },
 
