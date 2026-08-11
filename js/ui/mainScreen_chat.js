@@ -122,9 +122,9 @@
       .then(function (worldResult) {
         narrativeText = worldResult ? worldResult.text || userText : userText;
 
-        // 写入 chatHistory
+        // 写入 chatHistory（清洗裸行动建议 JSON，防止历史污染回传）
         if (worldResult && worldResult.text) {
-          G.chatHistory.push({ role: "assistant", content: worldResult.text });
+          G.chatHistory.push({ role: "assistant", content: stripActionSuggestionsJson(worldResult.text) });
           // 替换流式中间文本为干净版
           var logEl = _dom.chatLog;
           if (logEl) {
@@ -322,7 +322,7 @@
       showProcessLog("story", "叙事 AI 完成 (" + elapsed + "s)", true);
 
       if (response && response.text) {
-        G.chatHistory.push({ role: "assistant", content: response.text });
+        G.chatHistory.push({ role: "assistant", content: stripActionSuggestionsJson(response.text) });
       }
 
       var storyToShow = response && response.storyBody ? response.storyBody : stripPsyTags(response ? response.text : "");
@@ -823,6 +823,18 @@
       s = s.replace(/<\/psy_[a-z_]+[^>]*>/gi, '');
       return s.trim();
     };
+  }
+
+  /**
+   * 剥离裸四级行动建议 JSON（委托共享实现）。
+   * 用于 chatHistory 写入前清洗，防止裸 JSON 污染历史并回传给 AI。
+   */
+  function stripActionSuggestionsJson(text) {
+    var PsyDoctorStoryGenerate = global.PsyDoctorStoryGenerate;
+    if (PsyDoctorStoryGenerate && typeof PsyDoctorStoryGenerate.stripActionSuggestionsJson === "function") {
+      return PsyDoctorStoryGenerate.stripActionSuggestionsJson(text);
+    }
+    return text;
   }
 
   /** 剥离 AI 回复中的 <psy_*> 标签，仅保留可见文本 */

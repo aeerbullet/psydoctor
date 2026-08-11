@@ -193,6 +193,8 @@
     if (!G.therapyTools) G.therapyTools = [];
     if (!G.consultationRoomItems) G.consultationRoomItems = [];
     if (!G.chatHistory) G.chatHistory = [];
+    // 读档清洗：剥离历史中已泄漏的裸四级行动建议 JSON（防止回传污染 AI）
+    cleanChatHistory(G);
     if (!G.caseSessionHistory) G.caseSessionHistory = [];
     if (!G.worldTimeStack) G.worldTimeStack = [];
     if (!G.age) G.age = 20;
@@ -206,6 +208,27 @@
     if (!G) return;
     if (!Array.isArray(G.nearbyPeople)) G.nearbyPeople = [];
     if (!Array.isArray(G.currentClients)) G.currentClients = [];
+  }
+
+  // ===== 清洗聊天历史中的裸四级行动建议 JSON =====
+  // 删除功能前或 AI 未按标签输出时，历史中可能残留 {aggressive/...} JSON，
+  // 会被回传给 AI 导致格式延续。读档时统一清洗。
+  function cleanChatHistory(G) {
+    if (!G || !Array.isArray(G.chatHistory)) return;
+    var PsyDoctorStoryGenerate = global.PsyDoctorStoryGenerate;
+    if (!PsyDoctorStoryGenerate || typeof PsyDoctorStoryGenerate.stripActionSuggestionsJson !== "function") return;
+    var cleaned = false;
+    for (var i = 0; i < G.chatHistory.length; i++) {
+      var msg = G.chatHistory[i];
+      if (msg && typeof msg.content === "string" && msg.content.indexOf('"aggressive"') >= 0) {
+        var c = PsyDoctorStoryGenerate.stripActionSuggestionsJson(msg.content);
+        if (c !== msg.content) {
+          msg.content = c;
+          cleaned = true;
+        }
+      }
+    }
+    return cleaned;
   }
 
   // ===== 设置临床时数 =====
@@ -365,6 +388,7 @@
     autoSave: autoSave,
     ensureGameRuntimeDefaults: ensureGameRuntimeDefaults,
     ensureNearbyPeopleArray: ensureNearbyPeopleArray,
+    cleanChatHistory: cleanChatHistory,
     setClinicalHours: setClinicalHours,
     setTheoryProgress: setTheoryProgress,
     checkTheoryProgress: checkTheoryProgress,

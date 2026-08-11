@@ -272,7 +272,27 @@
     s = s.replace(/<psy_[a-z_]+[^>]*>/gi, '');
     // 第四遍：剥离残留的裸闭标签 </psy_...>
     s = s.replace(/<\/psy_[a-z_]+[^>]*>/gi, '');
+    // 第五遍：剥离无标签包裹的裸四级行动建议 JSON（AI 可能未按格式输出标签）
+    s = stripActionSuggestionsJson(s);
     return s.trim();
+  }
+
+  /**
+   * 剥离裸四级行动建议 JSON。
+   * 当 AI 直接输出 { "aggressive": "...", "neutral": "...", "cautious": "...", "veryCautious": "..." }
+   * 而未用 <psy_action_suggestions> 标签包裹时，标签剥离无法兜住，这里按 JSON 形状查杀。
+   * 兼容：单双引号、多行/缩进、key 顺序固定。
+   */
+  function stripActionSuggestionsJson(text) {
+    if (!text) return "";
+    var s = String(text);
+    // 匹配完整的四级行动建议 JSON 对象（含前导/尾随空白、多行缩进）
+    // 形状：{ "aggressive": "...", "neutral": "...", "cautious": "...", "veryCautious": "..." }
+    var re = /\{\s*(?:"|')aggressive(?:"|')\s*:\s*(?:"|')(?:\\[\s\S]|[^"'])+?(?:"|')\s*,\s*(?:"|')neutral(?:"|')\s*:\s*(?:"|')(?:\\[\s\S]|[^"'])+?(?:"|')\s*,\s*(?:"|')cautious(?:"|')\s*:\s*(?:"|')(?:\\[\s\S]|[^"'])+?(?:"|')\s*,\s*(?:"|')veryCautious(?:"|')\s*:\s*(?:"|')(?:\\[\s\S]|[^"'])+?(?:"|')\s*\}/gi;
+    var cleaned = s.replace(re, "");
+    // 清理因移除 JSON 产生的多余空行
+    cleaned = cleaned.replace(/\n{3,}/g, "\n\n").replace(/^\s*\n/, "");
+    return cleaned.trim();
   }
 
   /** 完整回复管线：提取 <psy_story_body> + 剥离 meta-leak + 保留机器标签 */
@@ -304,6 +324,7 @@
     extractJSONTag: extractJSONTag,
     stripStoryAiMetaLeakFromNarrative: stripStoryAiMetaLeakFromNarrative,
     stripAllPsyMachineTags: stripAllPsyMachineTags,
+    stripActionSuggestionsJson: stripActionSuggestionsJson,
     visibleNarrativeForStreamingChunk: visibleNarrativeForStreamingChunk,
     resolveStoryReplyForPipeline: resolveStoryReplyForPipeline,
   };
