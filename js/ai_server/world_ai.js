@@ -125,6 +125,11 @@
       s.push("取向: " + (G.activeTheoryOrientation || "无"));
       s.push("时间: " + (G.worldTimeString || "") + " 地点: " + (G.currentLocation || "") + " " + (G.currentWorkplace || ""));
 
+      // 当前地点场景类型（页面解耦）
+      var locId = global.PsyMainScreenMap ? global.PsyMainScreenMap.getCurrentLocation() : "";
+      var sceneType = global.PsyMainScreenMap ? global.PsyMainScreenMap.getSceneType(locId) : "";
+      s.push("当前地点: " + (locId || "map") + (sceneType ? " 场景类型: " + sceneType : ""));
+
       // 反移情
       if (G.countertransference && G.countertransference.overallRiskLevel !== "low") {
         s.push("反移情风险: " + G.countertransference.overallRiskLevel);

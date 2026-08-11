@@ -68,6 +68,9 @@
       statsSummary += "临床时数：" + (G.clinicalHours || 0) + " 督导时数：" + (G.supervisionHours || 0) + "\n";
       statsSummary += "理论取向：" + (G.activeTheoryOrientation || "未确定") + "\n";
       statsSummary += "当前场景：" + (G.currentLocation || "未知") + " " + (G.currentWorkplace || "未知") + "\n";
+      var locId = global.PsyMainScreenMap ? global.PsyMainScreenMap.getCurrentLocation() : "";
+      var sceneType = global.PsyMainScreenMap ? global.PsyMainScreenMap.getSceneType(locId) : "";
+      statsSummary += "当前地点：" + (locId || "map") + (sceneType ? " 场景类型：" + sceneType : "") + "\n";
       statsSummary += "世界时间：" + (G.worldTimeString || "未知") + "\n";
 
       // 来访者摘要

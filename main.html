@@ -56,24 +56,35 @@
     <script src="./js/ui/mainScreen_panel.js"></script>
     <script src="./js/ui/mainScreen_panel_ui.js"></script>
     <script src="./js/ui/mainScreen_chat.js"></script>
+    <script src="./js/ui/mainScreen_map.js"></script>
     <script src="./js/ui/mainScreen.js"></script>
 
     <!-- ======== 顶部栏 ======== -->
     <header class="psy-main-header">
       <h1>心理医生成长记</h1>
       <div class="psy-header-info" id="psy-header-info">加载中…</div>
+      <div class="psy-header-quick" aria-label="当前状态速览">
+        <span class="psy-header-quick-item" id="psy-header-location">🗺 地图</span>
+        <span class="psy-header-quick-item" id="psy-header-level">—</span>
+        <span class="psy-header-quick-item" id="psy-header-fatigue">疲劳 0%</span>
+        <span class="psy-header-quick-item psy-ct-indicator psy-ct-indicator--low" id="psy-header-ct">● 正常</span>
+      </div>
+      <div class="psy-header-actions">
+        <button type="button" class="psy-header-btn" id="psy-map-toggle-btn" title="打开地图">🗺 地图</button>
+        <button type="button" class="psy-header-btn" id="psy-profile-toggle-btn" title="角色档案">👤 档案</button>
+      </div>
     </header>
 
     <!-- ======== 主布局：三栏 ======== -->
     <div class="psy-main-layout" id="psy-main-layout">
 
-      <!-- ===== 左栏：心理医生面板 ===== -->
-      <aside class="psy-pane psy-pane--player" aria-label="心理医生信息">
+      <!-- ===== 左栏：当前地点专职面板 ===== -->
+      <aside class="psy-pane psy-pane--player" aria-label="当前地点信息">
         <div class="psy-player-world-fixed" aria-label="世界时间">
           <div class="psy-world-time" id="psy-world-time">—</div>
         </div>
         <div class="psy-pane-header">
-          <span>心理医生</span>
+          <span id="psy-loc-title">🗺 地图</span>
           <span class="psy-ct-indicator psy-ct-indicator--low" id="psy-ct-indicator" title="反移情风险">● 正常</span>
         </div>
         <button
@@ -84,102 +95,105 @@
         >×</button>
         <div class="psy-pane-body psy-player-body">
 
-          <!-- 基础信息 -->
-          <div class="psy-player-name-vertical" id="psy-player-name">—</div>
-          <div class="psy-level-line" id="psy-level-line">—</div>
+          <!-- ===== 咨询室：核心临床 ===== -->
+          <section class="psy-loc-panel" data-loc="consultation">
+            <h3 class="psy-attr-section-title psy-attr-section-title--first">临床时数</h3>
+            <div class="psy-resource-row">
+              <div class="psy-stat-cell">
+                <span class="psy-stat-k">临床时数</span>
+                <span class="psy-stat-v" id="psy-clinical-hours-text">—</span>
+              </div>
+              <div class="psy-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="psy-clinical-bar">
+                <div class="psy-bar-fill psy-bar-fill--clinical" id="psy-clinical-bar-fill" style="width: 0%"></div>
+              </div>
+            </div>
 
-          <!-- 临床时数进度 -->
-          <div class="psy-resource-row">
-            <div class="psy-stat-cell">
-              <span class="psy-stat-k">临床时数</span>
-              <span class="psy-stat-v" id="psy-clinical-hours-text">—</span>
+            <h3 class="psy-attr-section-title">治疗工具</h3>
+            <div class="psy-tool-grid" id="psy-tool-grid" aria-label="治疗工具，最多10件">
+              <div class="psy-tool-slot psy-tool-slot--empty">—</div>
+              <div class="psy-tool-slot psy-tool-slot--empty">—</div>
+              <div class="psy-tool-slot psy-tool-slot--empty">—</div>
             </div>
-            <div class="psy-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="psy-clinical-bar">
-              <div class="psy-bar-fill psy-bar-fill--clinical" id="psy-clinical-bar-fill" style="width: 0%"></div>
-            </div>
-          </div>
 
-          <!-- 督导时数 + 个人体验时数 -->
-          <div class="psy-stat-pair-row">
-            <div class="psy-stat-cell">
-              <span class="psy-stat-k">督导时数</span>
-              <span class="psy-stat-v" id="psy-supervision-hours">0h</span>
+            <h3 class="psy-attr-section-title">咨询室布置</h3>
+            <div class="psy-room-items" id="psy-room-items">
+              <p class="psy-loc-empty-hint">布置咨询室，营造安心氛围。</p>
             </div>
+          </section>
+
+          <!-- ===== 书房：学习与自我成长 ===== -->
+          <section class="psy-loc-panel hidden" data-loc="study">
+            <h3 class="psy-attr-section-title psy-attr-section-title--first">理论取向</h3>
             <div class="psy-stat-cell">
-              <span class="psy-stat-k">个人体验</span>
+              <span class="psy-stat-k">当前取向</span>
+              <span class="psy-stat-v" id="psy-active-theory">—</span>
+            </div>
+
+            <h3 class="psy-attr-section-title">理论掌握</h3>
+            <div id="psy-theory-mastery-list">
+              <p class="psy-loc-empty-hint">研读经典，深化理论理解。</p>
+            </div>
+
+            <h3 class="psy-attr-section-title">哲学深度</h3>
+            <div id="psy-philosophy-depth-list">
+              <div class="psy-stat-pair-row">
+                <div class="psy-stat-cell"><span class="psy-stat-k">现象学</span><span class="psy-stat-v" id="psy-phil-phenomenology">—</span></div>
+                <div class="psy-stat-cell"><span class="psy-stat-k">诠释学</span><span class="psy-stat-v" id="psy-phil-hermeneutics">—</span></div>
+              </div>
+              <div class="psy-stat-pair-row">
+                <div class="psy-stat-cell"><span class="psy-stat-k">存在哲学</span><span class="psy-stat-v" id="psy-phil-existential">—</span></div>
+                <div class="psy-stat-cell"><span class="psy-stat-k">东方心学</span><span class="psy-stat-v" id="psy-phil-eastern">—</span></div>
+              </div>
+              <div class="psy-stat-cell"><span class="psy-stat-k">后现代批判</span><span class="psy-stat-v" id="psy-phil-postmodern">—</span></div>
+            </div>
+
+            <h3 class="psy-attr-section-title">藏书</h3>
+            <div class="psy-bookshelf-grid" id="psy-bookshelf-grid" aria-label="藏书架，最多30本">
+              <div class="psy-bookshelf-slot psy-bookshelf-slot--empty">—</div>
+              <div class="psy-bookshelf-slot psy-bookshelf-slot--empty">—</div>
+              <div class="psy-bookshelf-slot psy-bookshelf-slot--empty">—</div>
+            </div>
+
+            <h3 class="psy-attr-section-title">个人体验</h3>
+            <div class="psy-stat-cell">
+              <span class="psy-stat-k">个人体验时数</span>
               <span class="psy-stat-v" id="psy-personal-therapy-hours">0h</span>
             </div>
-          </div>
+          </section>
 
-          <!-- 当前理论取向 -->
-          <div class="psy-stat-cell" style="margin-top:0.3rem;">
-            <span class="psy-stat-k">理论取向</span>
-            <span class="psy-stat-v" id="psy-active-theory">—</span>
-          </div>
-
-          <!-- 8+2 属性面板 -->
-          <h3 class="psy-attr-section-title psy-attr-section-title--first">核心能力</h3>
-          <div class="psy-stat-pair-row">
-            <div class="psy-stat-cell"><span class="psy-stat-k">共情力</span><span class="psy-stat-v" id="psy-stat-empathy">—</span></div>
-            <div class="psy-stat-cell"><span class="psy-stat-k">洞察力</span><span class="psy-stat-v" id="psy-stat-insight">—</span></div>
-          </div>
-          <div class="psy-stat-pair-row">
-            <div class="psy-stat-cell"><span class="psy-stat-k">理论知</span><span class="psy-stat-v" id="psy-stat-knowledge">—</span></div>
-            <div class="psy-stat-cell"><span class="psy-stat-k">技术力</span><span class="psy-stat-v" id="psy-stat-technique">—</span></div>
-          </div>
-          <div class="psy-stat-pair-row">
-            <div class="psy-stat-cell"><span class="psy-stat-k">论断力</span><span class="psy-stat-v" id="psy-stat-judgment">—</span></div>
-            <div class="psy-stat-cell"><span class="psy-stat-k">自觉性</span><span class="psy-stat-v" id="psy-stat-awareness">—</span></div>
-          </div>
-          <div class="psy-stat-pair-row">
-            <div class="psy-stat-cell"><span class="psy-stat-k">沟通力</span><span class="psy-stat-v" id="psy-stat-communication">—</span></div>
-            <div class="psy-stat-cell"><span class="psy-stat-k">心理韧</span><span class="psy-stat-v" id="psy-stat-resilience">—</span></div>
-          </div>
-          <div class="psy-stat-pair-row">
-            <div class="psy-stat-cell"><span class="psy-stat-k">人文素养</span><span class="psy-stat-v" id="psy-stat-humanity">—</span></div>
-            <div class="psy-stat-cell"><span class="psy-stat-k">哲学思辨</span><span class="psy-stat-v" id="psy-stat-philosophy">—</span></div>
-          </div>
-
-          <!-- 哲学深度 -->
-          <h3 class="psy-attr-section-title">哲学深度</h3>
-          <div id="psy-philosophy-depth-list">
+          <!-- ===== 督导室：职业支持 ===== -->
+          <section class="psy-loc-panel hidden" data-loc="supervision">
+            <h3 class="psy-attr-section-title psy-attr-section-title--first">督导</h3>
             <div class="psy-stat-pair-row">
-              <div class="psy-stat-cell"><span class="psy-stat-k">现象学</span><span class="psy-stat-v" id="psy-phil-phenomenology">—</span></div>
-              <div class="psy-stat-cell"><span class="psy-stat-k">诠释学</span><span class="psy-stat-v" id="psy-phil-hermeneutics">—</span></div>
+              <div class="psy-stat-cell">
+                <span class="psy-stat-k">督导时数</span>
+                <span class="psy-stat-v" id="psy-supervision-hours">0h</span>
+              </div>
+              <div class="psy-stat-cell">
+                <span class="psy-stat-k">等级</span>
+                <span class="psy-stat-v" id="psy-level-line">—</span>
+              </div>
             </div>
-            <div class="psy-stat-pair-row">
-              <div class="psy-stat-cell"><span class="psy-stat-k">存在哲学</span><span class="psy-stat-v" id="psy-phil-existential">—</span></div>
-              <div class="psy-stat-cell"><span class="psy-stat-k">东方心学</span><span class="psy-stat-v" id="psy-phil-eastern">—</span></div>
+
+            <h3 class="psy-attr-section-title">督导记录</h3>
+            <div id="psy-supervision-records">
+              <p class="psy-loc-empty-hint">接受督导后，这里会留下职业成长的足迹。</p>
             </div>
-            <div class="psy-stat-cell"><span class="psy-stat-k">后现代批判</span><span class="psy-stat-v" id="psy-phil-postmodern">—</span></div>
-          </div>
+          </section>
 
-          <!-- 藏书 -->
-          <h3 class="psy-attr-section-title">藏书</h3>
-          <div class="psy-bookshelf-grid" id="psy-bookshelf-grid" aria-label="藏书架，最多30本">
-            <!-- 至少渲染一行空位 -->
-            <div class="psy-bookshelf-slot psy-bookshelf-slot--empty">—</div>
-            <div class="psy-bookshelf-slot psy-bookshelf-slot--empty">—</div>
-            <div class="psy-bookshelf-slot psy-bookshelf-slot--empty">—</div>
-          </div>
+          <!-- ===== 城市：人际与社区 ===== -->
+          <section class="psy-loc-panel hidden" data-loc="city">
+            <h3 class="psy-attr-section-title psy-attr-section-title--first">工作场所</h3>
+            <div class="psy-stat-cell">
+              <span class="psy-stat-k">当前工作</span>
+              <span class="psy-stat-v" id="psy-workplace-text">—</span>
+            </div>
 
-          <!-- 治疗工具 -->
-          <h3 class="psy-attr-section-title">治疗工具</h3>
-          <div class="psy-tool-grid" id="psy-tool-grid" aria-label="治疗工具，最多10件">
-            <div class="psy-tool-slot psy-tool-slot--empty">—</div>
-            <div class="psy-tool-slot psy-tool-slot--empty">—</div>
-            <div class="psy-tool-slot psy-tool-slot--empty">—</div>
-          </div>
-
-          <!-- 疲劳度 -->
-          <h3 class="psy-attr-section-title">状态</h3>
-          <div class="psy-stat-cell">
-            <span class="psy-stat-k">疲劳度</span>
-            <span class="psy-stat-v" id="psy-stat-fatigue">0%</span>
-          </div>
-          <div class="psy-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="psy-fatigue-bar">
-            <div class="psy-bar-fill psy-bar-fill--fatigue" id="psy-fatigue-bar-fill" style="width: 0%"></div>
-          </div>
+            <h3 class="psy-attr-section-title">社区服务</h3>
+            <div id="psy-community-panel">
+              <p class="psy-loc-empty-hint">参与社区心理服务，建立职业声誉。</p>
+            </div>
+          </section>
         </div>
       </aside>
 
@@ -230,9 +244,9 @@
         </div>
       </section>
 
-      <!-- ===== 右栏：来访者 + 周围人物 ===== -->
-      <aside class="psy-pane psy-pane--npc" aria-label="周围人物">
-        <div class="psy-pane-header">周围人物</div>
+      <!-- ===== 右栏：当前地点人物/事件 ===== -->
+      <aside class="psy-pane psy-pane--npc" aria-label="地点人物">
+        <div class="psy-pane-header">地点人物</div>
         <button
           type="button"
           class="psy-mobile-panel-close"
@@ -241,25 +255,62 @@
         >×</button>
         <div class="psy-pane-body" id="psy-npc-pane-body">
 
-          <!-- 来访者列表 -->
-          <h3 class="psy-attr-section-title psy-attr-section-title--first">当前来访者</h3>
-          <div class="psy-npc-list" id="psy-client-list">
-            <p style="font-size:0.78rem;color:#556677;">暂无来访者</p>
-          </div>
+          <!-- 咨询室：来访者 -->
+          <section class="psy-loc-panel" data-loc="consultation">
+            <h3 class="psy-attr-section-title psy-attr-section-title--first">当前来访者</h3>
+            <div class="psy-npc-list" id="psy-client-list">
+              <p style="font-size:0.78rem;color:#556677;">暂无来访者</p>
+            </div>
+          </section>
 
-          <!-- 督导师/同行 -->
-          <h3 class="psy-attr-section-title">督导师 / 同行</h3>
-          <div class="psy-npc-list" id="psy-colleague-list">
-            <p style="font-size:0.78rem;color:#556677;">暂无</p>
-          </div>
+          <!-- 书房：无人 -->
+          <section class="psy-loc-panel hidden" data-loc="study">
+            <p class="psy-loc-empty-hint">书房清静，适合独处与沉思。</p>
+          </section>
 
-          <!-- 职业事件 -->
-          <h3 class="psy-attr-section-title">职业事件</h3>
-          <div class="psy-npc-list" id="psy-career-events-list">
-            <p style="font-size:0.78rem;color:#556677;">暂无活跃事件</p>
-          </div>
+          <!-- 督导室：督导师 + 职业事件 -->
+          <section class="psy-loc-panel hidden" data-loc="supervision">
+            <h3 class="psy-attr-section-title psy-attr-section-title--first">督导师 / 同行</h3>
+            <div class="psy-npc-list" id="psy-colleague-list">
+              <p style="font-size:0.78rem;color:#556677;">暂无</p>
+            </div>
+
+            <h3 class="psy-attr-section-title">职业事件</h3>
+            <div class="psy-npc-list" id="psy-career-events-list">
+              <p style="font-size:0.78rem;color:#556677;">暂无活跃事件</p>
+            </div>
+          </section>
+
+          <!-- 城市：周围人物 -->
+          <section class="psy-loc-panel hidden" data-loc="city">
+            <h3 class="psy-attr-section-title psy-attr-section-title--first">周围人物</h3>
+            <div class="psy-npc-list" id="psy-city-people-list">
+              <p style="font-size:0.78rem;color:#556677;">暂无</p>
+            </div>
+          </section>
         </div>
       </aside>
+    </div>
+
+    <!-- ======== 地图全屏覆盖层 ======== -->
+    <div id="psy-map-overlay" class="psy-map-overlay hidden" aria-hidden="true">
+      <div class="psy-map-bg" role="img" aria-label="城市地图背景"></div>
+      <div class="psy-map-panel">
+        <div class="psy-map-title">城市地图</div>
+        <div class="psy-map-overview" id="psy-map-overview"></div>
+        <div class="psy-map-nodes" id="psy-map-nodes"></div>
+      </div>
+      <button type="button" class="psy-map-close" id="psy-map-close-btn" aria-label="关闭地图">×</button>
+    </div>
+
+    <!-- ======== 角色档案弹层 ======== -->
+    <div id="psy-profile-root" class="psy-modal-root hidden" aria-hidden="true">
+      <div class="psy-modal-backdrop" data-psy-profile-close tabindex="-1"></div>
+      <div class="psy-modal" role="dialog" aria-modal="true" aria-labelledby="psy-profile-title">
+        <button type="button" class="psy-modal-close" data-psy-profile-close aria-label="关闭">×</button>
+        <h3 id="psy-profile-title" class="psy-modal-title">角色档案</h3>
+        <div id="psy-profile-body"></div>
+      </div>
     </div>
 
     <!-- ======== 门闩全屏覆盖层 ======== -->

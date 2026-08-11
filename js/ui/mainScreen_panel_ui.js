@@ -33,12 +33,22 @@
     var pn = qs("psy-player-name");
     if (pn) pn.textContent = (fc && fc.playerName) || (G.fateChoice && G.fateChoice.playerName) || "—";
 
-    // 等级
-    var ll = qs("psy-level-line");
-    if (ll) {
+    // 顶栏速览：等级 / 地点 / 疲劳
+    var hLevel = qs("psy-header-level");
+    if (hLevel) {
       var major = G.doctorLevel ? G.doctorLevel.major : "";
       var minor = G.doctorLevel ? G.doctorLevel.minor : "";
-      ll.textContent = major + "·" + minor;
+      hLevel.textContent = major + "·" + minor;
+    }
+    var hFatigue = qs("psy-header-fatigue");
+    if (hFatigue) hFatigue.textContent = "疲劳 " + (G.currentFatigue || 0) + "%";
+
+    // 等级（左栏督导室面板）
+    var ll = qs("psy-level-line");
+    if (ll) {
+      var major2 = G.doctorLevel ? G.doctorLevel.major : "";
+      var minor2 = G.doctorLevel ? G.doctorLevel.minor : "";
+      ll.textContent = major2 + "·" + minor2;
     }
 
     // 临床时数
@@ -63,6 +73,8 @@
     // 督导时数
     var sh = qs("psy-supervision-hours");
     if (sh) sh.textContent = (G.supervisionHours || 0) + "h";
+
+    // 个人体验时数
     var ph = qs("psy-personal-therapy-hours");
     if (ph) ph.textContent = (G.personalTherapyHours || 0) + "h";
 
@@ -70,28 +82,8 @@
     var at = qs("psy-active-theory");
     if (at) at.textContent = G.activeTheoryOrientation || "—";
 
-    // 8+2 属性
-    var attrMap = {
-      "psy-stat-empathy": "empathy",
-      "psy-stat-insight": "insight",
-      "psy-stat-knowledge": "knowledge",
-      "psy-stat-technique": "technique",
-      "psy-stat-judgment": "judgment",
-      "psy-stat-awareness": "awareness",
-      "psy-stat-communication": "communication",
-      "psy-stat-resilience": "resilience",
-      "psy-stat-humanity": "humanity",
-      "psy-stat-philosophy": "philosophy",
-    };
-    var base = G.psychologistBase || {};
-    var aKeys = Object.keys(attrMap);
-    aKeys.forEach(function (elId) {
-      var el = qs(elId);
-      if (el) {
-        var attrKey = attrMap[elId];
-        el.textContent = base[attrKey] !== undefined ? String(base[attrKey]) : "—";
-      }
-    });
+    // 8+2 属性 → 角色档案弹层
+    renderProfileBody(G);
 
     // 哲学深度
     if (G.philosophyDepth) {
@@ -112,26 +104,125 @@
       });
     }
 
-    // 反移情指示器
+    // 反移情指示器（左栏面板头 + 顶栏）
+    var ctRisk = G.countertransference && G.countertransference.overallRiskLevel ? G.countertransference.overallRiskLevel : "low";
     var ctInd = qs("psy-ct-indicator");
-    if (ctInd && G.countertransference) {
-      var risk = G.countertransference.overallRiskLevel || "low";
-      ctInd.className = "psy-ct-indicator psy-ct-indicator--" + risk;
+    if (ctInd) {
+      ctInd.className = "psy-ct-indicator psy-ct-indicator--" + ctRisk;
       var riskLabels = { low: "● 正常", medium: "● 注意", high: "● 警告", critical: "● 危机" };
-      ctInd.textContent = riskLabels[risk] || "● 正常";
-      ctInd.title = "反移情风险：" + risk;
+      ctInd.textContent = riskLabels[ctRisk] || "● 正常";
+      ctInd.title = "反移情风险：" + ctRisk;
+    }
+    var hCt = qs("psy-header-ct");
+    if (hCt) {
+      hCt.className = "psy-header-quick-item psy-ct-indicator psy-ct-indicator--" + ctRisk;
+      var hLabels = { low: "● 正常", medium: "● 注意", high: "● 警告", critical: "● 危机" };
+      hCt.textContent = hLabels[ctRisk] || "● 正常";
+      hCt.title = "反移情风险：" + ctRisk;
     }
 
-    // 疲劳度
-    var sf = qs("psy-stat-fatigue");
-    if (sf) sf.textContent = (G.currentFatigue || 0) + "%";
-    var fbf = qs("psy-fatigue-bar-fill");
-    if (fbf) fbf.style.width = Math.min((G.currentFatigue || 0), 100) + "%";
+    // 工作场所（城市面板）
+    var wt2 = qs("psy-workplace-text");
+    if (wt2) wt2.textContent = (G.currentWorkplace || "—") + " · " + (G.currentLocation || "—");
 
     // 藏书网格
     renderBookShelfGrid(G);
     // 工具网格
     renderTherapyToolGrid(G);
+    // 理论掌握（书房面板）
+    renderTheoryMastery(G);
+    // 督导记录（督导室面板）
+    renderSupervisionRecords(G);
+    // 咨询室布置（咨询室面板）
+    renderRoomItems(G);
+  }
+
+  // ===== 渲染角色档案弹层内容（8+2 属性） =====
+  function renderProfileBody(G) {
+    var body = qs("psy-profile-body");
+    if (!body || !G) return;
+
+    var attrMap = [
+      ["empathy", "共情力"], ["insight", "洞察力"], ["knowledge", "理论知"], ["technique", "技术力"],
+      ["judgment", "论断力"], ["awareness", "自觉性"], ["communication", "沟通力"], ["resilience", "心理韧"],
+      ["humanity", "人文素养"], ["philosophy", "哲学思辨"],
+    ];
+    var base = G.psychologistBase || {};
+    var pn = (G.fateChoice && G.fateChoice.playerName) || "—";
+    var major = G.doctorLevel ? G.doctorLevel.major : "";
+    var minor = G.doctorLevel ? G.doctorLevel.minor : "";
+
+    var html = '<div class="psy-profile-name">' + escHtml(pn) + '</div>'
+      + '<div class="psy-profile-level">' + escHtml(major + "·" + minor) + '</div>'
+      + '<div class="psy-profile-grid">';
+    attrMap.forEach(function (pair) {
+      var val = base[pair[0]] !== undefined ? base[pair[0]] : "—";
+      html += '<div class="psy-profile-attr">'
+        + '<span class="psy-profile-attr-k">' + pair[1] + '</span>'
+        + '<span class="psy-profile-attr-v">' + val + '</span>'
+        + '</div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+  }
+
+  // ===== 渲染理论掌握（书房） =====
+  function renderTheoryMastery(G) {
+    var list = qs("psy-theory-mastery-list");
+    if (!list) return;
+    var tm = G.theoryMastery || {};
+    var keys = Object.keys(tm);
+    if (keys.length === 0) {
+      list.innerHTML = '<p class="psy-loc-empty-hint">研读经典，深化理论理解。</p>';
+      return;
+    }
+    var html = "";
+    keys.forEach(function (tn) {
+      var m = tm[tn] || {};
+      var stageLabels = { 0: "初识", 1: "初窥", 2: "入门", 3: "熟练", 4: "精通", 5: "大师" };
+      html += '<div class="psy-theory-row">'
+        + '<span class="psy-theory-name">' + escHtml(tn) + '</span>'
+        + '<span class="psy-theory-stage">' + (stageLabels[m.stage] || m.stage || "初识") + '</span>'
+        + '<span class="psy-theory-hours">' + (m.hours || 0) + 'h</span>'
+        + '</div>';
+    });
+    list.innerHTML = html;
+  }
+
+  // ===== 渲染督导记录（督导室） =====
+  function renderSupervisionRecords(G) {
+    var list = qs("psy-supervision-records");
+    if (!list) return;
+    var history = G.careerHistory || [];
+    var records = history.filter(function (h) { return h && (h.type === "supervision_required" || /督导/.test(h.event || "")); });
+    if (records.length === 0) {
+      list.innerHTML = '<p class="psy-loc-empty-hint">接受督导后，这里会留下职业成长的足迹。</p>';
+      return;
+    }
+    var html = "";
+    records.slice(-6).reverse().forEach(function (r) {
+      html += '<div class="psy-record-item">'
+        + '<div class="psy-record-time">' + escHtml(r.time || "") + '</div>'
+        + '<div class="psy-record-text">' + escHtml(r.event || "") + '</div>'
+        + '</div>';
+    });
+    list.innerHTML = html;
+  }
+
+  // ===== 渲染咨询室布置（咨询室） =====
+  function renderRoomItems(G) {
+    var el = qs("psy-room-items");
+    if (!el) return;
+    var items = G.consultationRoomItems || [];
+    if (items.length === 0) {
+      el.innerHTML = '<p class="psy-loc-empty-hint">布置咨询室，营造安心氛围。</p>';
+      return;
+    }
+    var html = "";
+    items.forEach(function (item) {
+      html += '<div class="psy-room-item">' + escHtml(item.name || "物品") + '</div>';
+    });
+    el.innerHTML = html;
   }
 
   // ===== 渲染藏书网格 =====
@@ -180,7 +271,7 @@
   function renderRightPanel(G) {
     if (!G) return;
 
-    // 来访者列表
+    // 来访者列表（咨询室）
     var clientList = qs("psy-client-list");
     if (clientList) {
       var clients = G.currentClients || [];
@@ -195,7 +286,7 @@
       }
     }
 
-    // 同事/督导师
+    // 同事/督导师（督导室）
     var colList = qs("psy-colleague-list");
     if (colList) {
       var people = G.nearbyPeople || [];
@@ -215,7 +306,7 @@
       }
     }
 
-    // 职业事件
+    // 职业事件（督导室）
     var evList = qs("psy-career-events-list");
     if (evList) {
       var events = G.activeCareerEvents || [];
@@ -231,6 +322,25 @@
             + '</div>';
         });
         evList.innerHTML = html3;
+      }
+    }
+
+    // 周围人物（城市）
+    var cityList = qs("psy-city-people-list");
+    if (cityList) {
+      var cityPeople = G.nearbyPeople || [];
+      if (cityPeople.length === 0) {
+        cityList.innerHTML = '<p style="font-size:0.78rem;color:#556677;">暂无</p>';
+      } else {
+        var html4 = "";
+        cityPeople.forEach(function (p) {
+          html4 += '<div class="psy-npc-card">'
+            + '<div class="psy-npc-name">' + escHtml(p.displayName || "未知") + '</div>'
+            + '<div class="psy-npc-role">' + escHtml(p.role || "") + '</div>'
+            + (p.caseType ? '<div class="psy-npc-theory">' + escHtml(p.caseType) + '</div>' : "")
+            + '</div>';
+        });
+        cityList.innerHTML = html4;
       }
     }
   }
@@ -385,6 +495,10 @@
     renderRightPanel: renderRightPanel,
     renderClientCard: renderClientCard,
     renderChatHistory: renderChatHistory,
+    renderProfileBody: renderProfileBody,
+    renderTheoryMastery: renderTheoryMastery,
+    renderSupervisionRecords: renderSupervisionRecords,
+    renderRoomItems: renderRoomItems,
     showLevelUpNotification: showLevelUpNotification,
     closeModal: closeModal,
     initAllModals: initAllModals,

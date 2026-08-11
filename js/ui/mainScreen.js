@@ -87,6 +87,12 @@
       PsyMainScreenChat.init();
     }
 
+    // Step 8.5: 地图系统初始化（页面解耦）
+    var PsyMainScreenMap = global.PsyMainScreenMap;
+    if (PsyMainScreenMap) {
+      PsyMainScreenMap.init();
+    }
+
     // Step 9: 绑定行动建议按钮（已由 chat 模块处理）
 
     // Step 10: 绑定手机端面板切换（已在 main.html 中处理）
