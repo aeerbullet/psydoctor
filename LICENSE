@@ -1,21 +1,34 @@
-MIT License
+# PsyDoctor 非商用开源许可证
 
 Copyright (c) 2026 zhangsw147258
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+## 1. 允许的事项
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+本作品及其源代码、文档、素材（以下简称「作品」）允许任何人：
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+- **复制与传播**：自由复制、分发、转载本作品的副本，包括完整或部分内容；
+- **修改**：出于学习、研究、个人使用等非商业目的修改源代码；
+- **展示**：在个人项目、学习笔记、教学演示中展示或引用本作品。
+
+## 2. 禁止的事项
+
+以下行为**严格禁止**，未经版权所有者书面许可不得进行：
+
+- **商业使用**：不得将本作品用于任何商业目的，包括但不限于——
+  - 销售、出租、许可或变相收费使用本作品或其衍生作品；
+  - 在商业产品、商业服务、付费课程、商业广告中使用本作品；
+  - 通过本作品或其衍生作品直接或间接获取商业利益。
+- **参加比赛**：不得将本作品或其衍生作品提交至任何形式的比赛、竞赛、评选活动，包括但不限于编程比赛、游戏开发比赛、创意比赛、黑客松等，无论该比赛是否涉及商业奖励。
+- **商标使用**：不得使用作品中的名称、标志用于非本作品的推广。
+
+## 3. 衍生作品
+
+任何基于本作品的修改、翻译、衍生作品，均应继承本许可证的条款，并应保留本许可证及版权声明。
+
+## 4. 免责声明
+
+本作品按「现状」提供，不附带任何明示或默示的担保，包括但不限于对适销性、特定用途适用性及不侵权的担保。作者不对因使用本作品而产生的任何直接、间接、附带或后果性损害承担责任。
+
+---
+
+*如有任何超出本许可证范围的授权需求，请联系版权所有者。*

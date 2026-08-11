@@ -116,4 +116,4 @@ psydoctor/
 
 ## 📄 License
 
-[MIT License](LICENSE) — 自由使用、修改、分发。
+[PsyDoctor 非商用开源许可证](LICENSE) — 允许复制、传播与个人学习研究；**禁止商业使用、禁止参加任何比赛**。
