@@ -1,2 +1,2 @@
-image/*.png filter=lfs diff=lfs merge=lfs -text
+# 背景图以普通文件存储（Gitee 免费版不支持 LFS，因此关闭 LFS 追踪）
 image/*.png !text !filter !merge !diff
