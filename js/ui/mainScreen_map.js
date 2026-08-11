@@ -25,9 +25,6 @@
   // ===== 内部状态：当前激活地点 =====
   var _currentLoc = null;
 
-  // ===== 过场定时器（防止快速连点叠加） =====
-  var _fadeTimer = null;
-
   // ===== DOM 缓存 =====
   var _dom = {};
 
@@ -45,7 +42,6 @@
       headerLocation: qs("psy-header-location"),
       locTitle: qs("psy-loc-title"),
       chatPane: document.querySelector(".psy-pane--chat"),
-      locFade: qs("psy-loc-fade"),
     };
   }
 
@@ -204,7 +200,6 @@
   }
 
   // ===== 进入地点 =====
-  // 主动切换（silent=false）时先做极短暂的平滑过场（淡出→切图→淡入）
   function enterLocation(locId, silent) {
     var loc = LOCATIONS[locId];
     if (!loc) return;
@@ -220,39 +215,6 @@
     // 关闭地图
     showMap(false);
 
-    // 主动切换：播放过场动画后再执行真实切换
-    if (!silent) {
-      playLocationTransition(loc, locId);
-    } else {
-      switchToLocation(loc, locId, true);
-    }
-  }
-
-  // ===== 极短暂平滑过场 =====
-  // 遮罩淡入(120ms) → 切换场景 → 遮罩淡出(120ms)
-  function playLocationTransition(loc, locId) {
-    var fade = _dom.locFade;
-    if (!fade) {
-      switchToLocation(loc, locId, false);
-      return;
-    }
-
-    // 防止快速连点叠加
-    if (_fadeTimer) {
-      clearTimeout(_fadeTimer);
-    }
-
-    fade.classList.add("psy-loc-fade--active");
-
-    _fadeTimer = setTimeout(function () {
-      switchToLocation(loc, locId, false);
-      fade.classList.remove("psy-loc-fade--active");
-      _fadeTimer = null;
-    }, 120);
-  }
-
-  // ===== 执行真实场景切换 =====
-  function switchToLocation(loc, locId, silent) {
     // 切换背景图（聊天区背景）
     setLocationBg(locId);
 
@@ -269,7 +231,7 @@
     // 刷新面板
     refreshPanels();
 
-    // 非静默切换：写入叙事提示
+    // 非静默切换：写入叙事提示 + 触发场景叙事（可选）
     if (!silent) {
       appendLocationMessage(loc);
     }
