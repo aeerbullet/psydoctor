@@ -935,13 +935,33 @@ body {
   font-style: italic;
 }
 
-/* ===== 聊天区背景（随地点切换） ===== */
+/* ===== 聊天区背景（随地点切换，图片平滑过渡） ===== */
 .psy-pane--chat {
   position: relative;
   background-color: #0c1c14;
+  overflow: hidden;
+}
+
+/* 双层背景图：当前层 + 过渡层，交叉淡入淡出实现图片平滑切换 */
+.psy-chat-bg,
+.psy-chat-bg--next {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  pointer-events: none;
+}
+
+.psy-chat-bg.psy-chat-bg--active {
+  opacity: 1;
+}
+
+.psy-chat-bg--next.psy-chat-bg--active {
+  opacity: 1;
 }
 
 .psy-pane--chat::before {
@@ -950,12 +970,12 @@ body {
   inset: 0;
   background: rgba(10, 22, 15, 0.55);
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
 }
 
 .psy-pane--chat > * {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 /* ===== 理论掌握行（书房） ===== */

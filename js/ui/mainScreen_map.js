@@ -25,6 +25,11 @@
   // ===== 内部状态：当前激活地点 =====
   var _currentLoc = null;
 
+  // ===== 双层背景图状态 =====
+  var _bgLayer = 0; // 0=当前层, 1=过渡层
+  var _bgTimer = null;
+  var _bgReady = false;
+
   // ===== DOM 缓存 =====
   var _dom = {};
 
@@ -42,6 +47,8 @@
       headerLocation: qs("psy-header-location"),
       locTitle: qs("psy-loc-title"),
       chatPane: document.querySelector(".psy-pane--chat"),
+      chatBg: qs("psy-chat-bg"),
+      chatBgNext: qs("psy-chat-bg-next"),
     };
   }
 
@@ -246,7 +253,8 @@
     G.currentFatigue = Math.min(100, (G.currentFatigue || 0) + COST);
   }
 
-  // ===== 切换背景图 =====
+  // ===== 切换背景图（双层 crossfade 平滑过渡） =====
+  // 首次设置时直接显示（无过渡）；后续切换才走 crossfade
   function setLocationBg(locId) {
     var dom = _dom;
     var root = document.body;
@@ -255,11 +263,47 @@
     // body 上挂 data-loc 供 CSS 选择器使用
     root.setAttribute("data-psy-loc", locId);
 
-    // 聊天区背景直接内联背景图（保证跨设备一致）
     var bg = LOCATIONS[locId] ? LOCATIONS[locId].bg : MAP_BG;
-    if (dom.chatPane) {
-      dom.chatPane.style.backgroundImage = "url('" + bg + "')";
+    var layer = _bgLayer === 0 ? dom.chatBg : dom.chatBgNext;
+    var next = _bgLayer === 0 ? dom.chatBgNext : dom.chatBg;
+    if (!layer || !next) {
+      // 兜底：无双层背景时直接设聊天区背景
+      if (dom.chatPane) {
+        dom.chatPane.style.backgroundImage = "url('" + bg + "')";
+      }
+      return;
     }
+
+    // 首次设置：直接在当前层显示图片
+    if (!_bgReady) {
+      layer.style.backgroundImage = "url('" + bg + "')";
+      layer.classList.add("psy-chat-bg--active");
+      _bgReady = true;
+      return;
+    }
+
+    // 防止快速连点叠加
+    if (_bgTimer) {
+      clearTimeout(_bgTimer);
+    }
+
+    // 过渡层载入新图并淡入，旧层淡出
+    next.style.backgroundImage = "url('" + bg + "')";
+    next.classList.add("psy-chat-bg--active");
+    layer.classList.remove("psy-chat-bg--active");
+
+    // 切换层标记
+    _bgLayer = 1 - _bgLayer;
+
+    // 过渡结束后清空旧层（避免残留图片）
+    var prev = _bgLayer === 0 ? dom.chatBgNext : dom.chatBg;
+    _bgTimer = setTimeout(function () {
+      if (prev) {
+        prev.style.backgroundImage = "";
+        prev.classList.remove("psy-chat-bg--active");
+      }
+      _bgTimer = null;
+    }, 350);
   }
 
   // ===== 按地点切换左右栏面板 =====
