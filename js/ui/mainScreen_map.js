@@ -204,6 +204,11 @@
     var loc = LOCATIONS[locId];
     if (!loc) return;
 
+    // 场景切换消耗少量疲劳（仅主动切换，且换到不同地点时）
+    if (!silent && _currentLoc && _currentLoc !== locId) {
+      applyTravelFatigue();
+    }
+
     // 记录当前激活地点
     _currentLoc = locId;
 
@@ -230,6 +235,15 @@
     if (!silent) {
       appendLocationMessage(loc);
     }
+  }
+
+  // ===== 场景切换疲劳消耗 =====
+  // 主动切换地点时消耗少量疲劳，钳制在 [0,100]
+  function applyTravelFatigue() {
+    var G = getGame();
+    if (!G) return;
+    var COST = 3;
+    G.currentFatigue = Math.min(100, (G.currentFatigue || 0) + COST);
   }
 
   // ===== 切换背景图 =====
