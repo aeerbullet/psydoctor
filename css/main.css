@@ -1169,6 +1169,21 @@ body {
 
 .psy-map-close:hover { color: #ff6b9d; border-color: #ff6b9d; }
 
+/* ===== 场景切换过场遮罩 ===== */
+.psy-loc-fade {
+  position: fixed;
+  inset: 0;
+  z-index: 1450;
+  background: #0b1a12;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease-in-out;
+}
+
+.psy-loc-fade.psy-loc-fade--active {
+  opacity: 1;
+}
+
 /* ===== 地图移动端适配 ===== */
 @media (max-width: 768px) {
   .psy-header-quick { display: none; }
